@@ -9,7 +9,7 @@ import trajkit
 
 
 def test_version_exists() -> None:
-    assert trajkit.__version__ == "0.0.1"
+    assert trajkit.__version__ == "0.1.0"
 
 
 def test_module_stubs_import() -> None:
