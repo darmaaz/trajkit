@@ -248,9 +248,16 @@ def test_segments_rejects_duplicate_id() -> None:
         tt.SegmentsSchema.validate(df)
 
 
-def test_segments_rejects_zero_duration() -> None:
+def test_segments_accepts_zero_duration() -> None:
+    # A single-ping segment without run_duration_s legitimately has duration 0.
     df = _segments()
     df.loc[0, "duration_s"] = 0.0
+    tt.SegmentsSchema.validate(df)
+
+
+def test_segments_rejects_negative_duration() -> None:
+    df = _segments()
+    df.loc[0, "duration_s"] = -1.0
     with pytest.raises(SCHEMA_ERROR):
         tt.SegmentsSchema.validate(df)
 

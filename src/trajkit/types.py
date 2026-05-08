@@ -158,7 +158,9 @@ class SegmentsSchema(pdr.DataFrameModel):
     segment_type: Series[str] = pdr.Field(nullable=False, isin=SEGMENT_TYPES)
     start_ts: Series[Annotated[pd.DatetimeTZDtype, "ns", "UTC"]] = pdr.Field(nullable=False)
     end_ts: Series[Annotated[pd.DatetimeTZDtype, "ns", "UTC"]] = pdr.Field(nullable=False)
-    duration_s: Series[np.float32] = pdr.Field(nullable=False, gt=0.0)
+    # ``duration_s`` is non-negative (not strictly > 0) because a single-ping
+    # segment without ``run_duration_s`` legitimately spans zero time.
+    duration_s: Series[np.float32] = pdr.Field(nullable=False, ge=0.0)
     start_lat: Series[float] = pdr.Field(nullable=False, ge=-90.0, le=90.0)
     start_lon: Series[float] = pdr.Field(nullable=False, ge=-180.0, le=180.0)
     end_lat: Series[float] = pdr.Field(nullable=False, ge=-90.0, le=90.0)
