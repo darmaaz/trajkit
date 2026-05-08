@@ -184,12 +184,41 @@ def _fit_one_metric(
 
 
 def _load_source(source: str | Path | pd.DataFrame) -> pd.DataFrame:
+    """Load a segments source — DataFrame, parquet file, or parquet directory.
+
+    Directory inputs are read by globbing each per-entity parquet file
+    individually (rather than via ``pd.read_parquet(dir)`` which delegates
+    to ``pyarrow.dataset``). The dataset-level read trips on a dict-vs-
+    string type mismatch when ``entity_id`` is encoded both as a Hive
+    partition (dictionary) and as an in-file column (string), which is
+    how the runner writes Hive output. Per-file reads bypass that.
+    """
     if isinstance(source, pd.DataFrame):
         return source.copy()
     path = Path(source)
     if not path.exists():
         msg = f"source path does not exist: {path}"
         raise FileNotFoundError(msg)
+    if path.is_dir():
+        files = sorted(path.rglob("*.parquet"))
+        if not files:
+            msg = f"no parquet files under {path}"
+            raise FileNotFoundError(msg)
+        parts: list[pd.DataFrame] = []
+        for f in files:
+            sub = pd.read_parquet(f)
+            # Restore Hive partition columns (path-encoded `key=value`)
+            # when the per-file parquet doesn't carry them. Handles both
+            # Hive-pure writers (pandas' ``partition_cols`` strips the col)
+            # and redundant writers (col both in file and path).
+            for parent in f.parents:
+                key, sep, value = parent.name.partition("=")
+                if not sep:
+                    continue
+                if key not in sub.columns:
+                    sub[key] = pd.Series([value] * len(sub), dtype="string")
+            parts.append(sub)
+        return pd.concat(parts, ignore_index=True)
     return pd.read_parquet(path)
 
 
