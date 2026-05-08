@@ -218,7 +218,9 @@ class EpisodesSchema(pdr.DataFrameModel):
     episode_type: Series[str] = pdr.Field(nullable=False, isin=EPISODE_TYPES)
     start_ts: Series[Annotated[pd.DatetimeTZDtype, "ns", "UTC"]] = pdr.Field(nullable=False)
     end_ts: Series[Annotated[pd.DatetimeTZDtype, "ns", "UTC"]] = pdr.Field(nullable=False)
-    duration_s: Series[np.float32] = pdr.Field(nullable=False, gt=0.0)
+    # Non-negative (not strictly > 0): a single zero-duration transit segment
+    # is a legitimate degenerate case (rare but real).
+    duration_s: Series[np.float32] = pdr.Field(nullable=False, ge=0.0)
     segment_ids: Series[object] = pdr.Field(nullable=False)
     n_segments: Series[np.int32] = pdr.Field(nullable=False, ge=1)
     # STAY-only
