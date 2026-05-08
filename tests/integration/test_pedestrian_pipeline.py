@@ -22,22 +22,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from trajkit.clean import CleanParams
 from trajkit.embed import EmbedParams
-from trajkit.episode import EpisodeParams, detect_episodes
+from trajkit.episode import detect_episodes
 from trajkit.runner import RunParams, process
-from trajkit.segment import SegmentParams
 
-# ── Pedestrian preset (matches design SCALE_PRESETS["pedestrian"]) ──
-
-
-PEDESTRIAN_PARAMS = RunParams(
-    clean=CleanParams(),  # vehicle defaults work for walking; nothing exceeds them
-    segment=SegmentParams(),  # default hysteresis is fine for pedestrian
-    episode=EpisodeParams(R_m=30.0, T_s=120.0, min_stay_s=120.0),
-    embed=EmbedParams(
-        spatial_bounds=(39.95, 40.02, 116.28, 116.36),  # tight Beijing bounds
-    ),
+# Use the published pedestrian preset, then layer a tighter spatial bbox for
+# better embedding resolution on this synthetic Beijing-area trace.
+PEDESTRIAN_PARAMS = RunParams.from_preset("pedestrian").model_copy(
+    update={
+        "embed": EmbedParams(spatial_bounds=(39.95, 40.02, 116.28, 116.36)),
+    }
 )
 
 

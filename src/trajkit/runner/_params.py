@@ -28,3 +28,14 @@ class RunParams(BaseModel):
     segment: SegmentParams = Field(default_factory=SegmentParams)
     episode: EpisodeParams = Field(default_factory=EpisodeParams)
     embed: EmbedParams = Field(default_factory=EmbedParams)
+
+    @classmethod
+    def from_preset(cls, name: str) -> RunParams:
+        """Return the named domain preset from ``trajkit.presets``.
+
+        Lazy-imports ``trajkit.presets`` to avoid a circular import at
+        module load time.
+        """
+        from trajkit.presets import get_preset
+
+        return get_preset(name)
