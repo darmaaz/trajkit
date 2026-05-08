@@ -46,6 +46,8 @@ dev = [
     "mkdocs>=1.5",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.24",
+    # ``[search]`` deps installed in dev so trajkit.compare is testable.
+    "faiss-cpu>=1.7",
 ]
 
 [project.urls]
