@@ -44,6 +44,8 @@ nav:
   - Home: index.md
   - Concepts:
       - concepts/index.md
+      - Pipeline: concepts/pipeline.md
+      - Parameters: concepts/parameters.md
   - Design:
       - design/LIBRARY.md
       - design/schemas.md
@@ -55,3 +57,14 @@ nav:
           - design/compare.md
   - Reference:
       - reference/index.md
+      - clean: reference/clean.md
+      - segment: reference/segment.md
+      - episode: reference/episode.md
+      - embed: reference/embed.md
+      - compare: reference/compare.md
+      - io: reference/io.md
+      - runner: reference/runner.md
+      - baselines: reference/baselines.md
+      - testing: reference/testing.md
+      - presets: reference/presets.md
+      - types: reference/types.md

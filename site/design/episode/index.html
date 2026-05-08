@@ -1,0 +1,1923 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Behavioral primitives for spatial-temporal traces">
+      
+      
+      
+        <link rel="canonical" href="https://github.com/darmaaz/trajkit/design/episode/">
+      
+      
+        <link rel="prev" href="../segment/">
+      
+      
+        <link rel="next" href="../embed/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Episode Layer — Design Sketch - trajkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#episode-layer-design-sketch" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="trajkit" class="md-header__button md-logo" aria-label="trajkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            trajkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Episode Layer — Design Sketch
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/darmaaz/trajkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    darmaaz/trajkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="trajkit" class="md-nav__button md-logo" aria-label="trajkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    trajkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/darmaaz/trajkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    darmaaz/trajkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LIBRARY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Plan — Shape, Scope, Extraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schemas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Modules
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../clean/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.clean
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.segment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Episode Layer — Design Sketch
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Episode Layer — Design Sketch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-closure-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The closure rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-envelope-radius-meters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        R — envelope radius (meters)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#t-departure-persistence-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        T — departure persistence (seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#min_stay_s-minimum-stay-duration-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        min_stay_s — minimum stay duration (seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Algorithm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edge-cases-specific-not-hand-waved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edge cases (specific, not hand-waved)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#episode-embedding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Episode embedding
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#episode-similarity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Episode similarity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calibration-helper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calibration helper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scale-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scale presets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-this-slots-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where this slots in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-complete-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "complete" looks like
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.embed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.compare
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/clean/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    clean
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/segment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    segment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/episode/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    episode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/embed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    embed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compare
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    io
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/baselines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    baselines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/presets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    presets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-closure-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The closure rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#r-envelope-radius-meters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        R — envelope radius (meters)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#t-departure-persistence-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        T — departure persistence (seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#min_stay_s-minimum-stay-duration-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        min_stay_s — minimum stay duration (seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Algorithm
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edge-cases-specific-not-hand-waved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edge cases (specific, not hand-waved)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#episode-embedding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Episode embedding
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#episode-similarity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Episode similarity
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calibration-helper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calibration helper
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scale-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scale presets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-this-slots-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where this slots in
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-complete-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "complete" looks like
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="episode-layer-design-sketch">Episode Layer — Design Sketch<a class="headerlink" href="#episode-layer-design-sketch" title="Permanent link">&para;</a></h1>
+<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
+<p>Introduce a scale between <strong>segment</strong> (atomic typed unit, seconds–minutes) and <strong>mission</strong> (origin→destination journey, hours). An episode is the smallest grouping of segments that corresponds to a coherent operational unit a human would name — a <em>visit</em> or a <em>leg</em> — independent of domain.</p>
+<h2 id="input">Input<a class="headerlink" href="#input" title="Permanent link">&para;</a></h2>
+<p>A segments DataFrame with at minimum, per row:</p>
+<table>
+<thead>
+<tr>
+<th>col</th>
+<th>type</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>segment_id</code></td>
+<td>str</td>
+<td>unique per trace</td>
+</tr>
+<tr>
+<td><code>entity_id</code></td>
+<td>str</td>
+<td>vehicle/vessel/animal/device</td>
+</tr>
+<tr>
+<td><code>start_ts</code>, <code>end_ts</code></td>
+<td>datetime</td>
+<td>ordered within entity</td>
+</tr>
+<tr>
+<td><code>start_lat</code>, <code>start_lon</code>, <code>end_lat</code>, <code>end_lon</code></td>
+<td>float</td>
+<td>WGS84</td>
+</tr>
+<tr>
+<td><code>segment_type</code></td>
+<td>enum</td>
+<td>MOVE, MOVE_BRIEF, STOP_BRIEF, STOP_DWELL</td>
+</tr>
+<tr>
+<td><code>duration_s</code></td>
+<td>float</td>
+<td>end - start</td>
+</tr>
+</tbody>
+</table>
+<p>Optionally a per-segment embedding <code>(N, D)</code> (numpy, row-aligned) for episode embedding.</p>
+<h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
+<p>An episodes DataFrame:</p>
+<table>
+<thead>
+<tr>
+<th>col</th>
+<th>type</th>
+<th>for type</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>episode_id</code></td>
+<td>str</td>
+<td>both</td>
+<td><code>ep_&lt;entity&gt;_&lt;seq&gt;</code></td>
+</tr>
+<tr>
+<td><code>entity_id</code></td>
+<td>str</td>
+<td>both</td>
+<td></td>
+</tr>
+<tr>
+<td><code>episode_type</code></td>
+<td>enum</td>
+<td>both</td>
+<td>STAY | TRANSIT</td>
+</tr>
+<tr>
+<td><code>start_ts</code>, <code>end_ts</code>, <code>duration_s</code></td>
+<td>—</td>
+<td>both</td>
+<td></td>
+</tr>
+<tr>
+<td><code>segment_ids</code></td>
+<td>list[str]</td>
+<td>both</td>
+<td>constituents</td>
+</tr>
+<tr>
+<td><code>n_segments</code></td>
+<td>int</td>
+<td>both</td>
+<td></td>
+</tr>
+<tr>
+<td><code>anchor_lat</code>, <code>anchor_lon</code>, <code>anchor_h3</code></td>
+<td>—</td>
+<td>STAY</td>
+<td>running mean of inside segments</td>
+</tr>
+<tr>
+<td><code>envelope_radius_m</code></td>
+<td>float</td>
+<td>STAY</td>
+<td>observed max segment-to-anchor distance</td>
+</tr>
+<tr>
+<td><code>start_anchor_*</code>, <code>end_anchor_*</code></td>
+<td>—</td>
+<td>TRANSIT</td>
+<td>first/last segment centroid</td>
+</tr>
+<tr>
+<td><code>displacement_m</code>, <code>path_length_m</code>, <code>straightness</code></td>
+<td>float</td>
+<td>TRANSIT</td>
+<td>great-circle / sum / ratio</td>
+</tr>
+</tbody>
+</table>
+<p>Plus optional <code>(M, D')</code> episode embedding matrix, row-aligned with episodes.</p>
+<h2 id="the-closure-rule">The closure rule<a class="headerlink" href="#the-closure-rule" title="Permanent link">&para;</a></h2>
+<p><strong>WHY.</strong> Behavioral run-length grouping ("three MOVE_BRIEFs in a row") is brittle to taxonomy choice and produces episodes that don't correspond to anything a human cares about. A spatial-envelope rule is anchored to a physical fact (the entity was here vs. going somewhere) that survives any segment-type taxonomy and generalizes across domains.</p>
+<p><strong>HOW.</strong> Detect stays first; transits are residuals. A stay is a maximal run of segments whose <strong>endpoints</strong> (both <code>start_lat/lon</code> and <code>end_lat/lon</code>) stay within a radius <code>R</code> of the running anchor centroid, allowing a grace window of <code>T</code> outside the envelope before closure. Anything between two stays is a transit.</p>
+<p><strong>Why endpoint-aware containment, not centroid-only.</strong> The natural intuition — "is this segment's centroid within R" — fails for spatially extended <code>MOVE</code> segments. A 3-minute walk that traverses 800m has a centroid that is one point ≤ R from itself, so it would trivially anchor a single-segment "stay" if its duration ≥ <code>min_stay_s</code>. Using endpoints rejects this: a segment whose start and end are far apart can't be inside any small envelope. For stationary segments where start ≈ end ≈ centroid, the endpoint check is equivalent to the centroid check.</p>
+<h2 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
+<p>Three knobs. Two physical, one minimum-duration filter.</p>
+<h3 id="r-envelope-radius-meters"><code>R</code> — envelope radius (meters)<a class="headerlink" href="#r-envelope-radius-meters" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>WHY.</strong> Defines "here." Smaller than R = same place; larger and persistent = departure.</li>
+<li><strong>HOW.</strong> User sets per scale class, or the calibration helper suggests it (see below). Anchor is the running mean of in-envelope segment centroids, not the first one — handles parking-then-drift-to-bay.</li>
+</ul>
+<h3 id="t-departure-persistence-seconds"><code>T</code> — departure persistence (seconds)<a class="headerlink" href="#t-departure-persistence-seconds" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>WHY.</strong> Prevents "drove around the block and came back" from splitting one stay into two.</li>
+<li><strong>HOW default.</strong> <code>5 × median(segment.duration_s)</code>. Rationale: an excursion shorter than ~5 atomic segments is noise; longer is a real departure. Robust to fleet-mix; no manual tuning needed.</li>
+</ul>
+<h3 id="min_stay_s-minimum-stay-duration-seconds"><code>min_stay_s</code> — minimum stay duration (seconds)<a class="headerlink" href="#min_stay_s-minimum-stay-duration-seconds" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>WHY.</strong> Filters "slow crawl through a parking lot" being labeled a stay.</li>
+<li><strong>HOW default.</strong> <code>3 × median(STOP_BRIEF.duration_s)</code>. Anything shorter is folded into the surrounding TRANSIT.</li>
+</ul>
+<h2 id="algorithm">Algorithm<a class="headerlink" href="#algorithm" title="Permanent link">&para;</a></h2>
+<p>Two passes per entity trace.</p>
+<p><strong>Pass 1 — stays.</strong> Greedy left-to-right scan, with two qualification gates: time (<code>stay_duration ≥ min_stay_s</code>) AND space (<code>max_observed_radius ≤ R</code>).</p>
+<div class="highlight"><pre><span></span><code>i = 0
+while i &lt; n:
+    anchor = centroid(seg[i])
+    last_inside = i
+    time_outside = 0
+    inside_centroids = [centroid(seg[i])]
+    inside_endpoints = [start(seg[i]), end(seg[i])]
+    for j in i+1 .. n-1:
+        if start_ts[j] - end_ts[j-1] &gt; T:    # trace gap closes the stay
+            break
+        d = max(
+            haversine(anchor, start(seg[j])),
+            haversine(anchor, end(seg[j])),
+        )
+        if d &lt;= R:
+            inside_centroids.append(centroid(seg[j]))
+            inside_endpoints += [start(seg[j]), end(seg[j])]
+            anchor = mean(inside_centroids)   # running update
+            last_inside = j
+            time_outside = 0
+        else:
+            time_outside += seg[j].duration_s
+            if time_outside &gt;= T:
+                break                          # stay ends at last_inside
+    max_obs_radius = max(haversine(anchor, p) for p in inside_endpoints)
+    stay_duration = end_ts[last_inside] - start_ts[i]
+    # Both gates must hold: a single spatially-extended segment whose
+    # endpoints exceed R fails the radius gate even if duration qualifies.
+    if stay_duration &gt;= min_stay_s and max_obs_radius &lt;= R:
+        emit STAY(i .. last_inside, anchor, max_obs_radius)
+        i = last_inside + 1
+    else:
+        i += 1                                 # not a stay, retry from next
+</code></pre></div>
+<p><strong>Pass 2 — transits.</strong> Each maximal run of segments not claimed by Pass 1 = one TRANSIT. Time gaps inside the trace exceeding <code>T</code> split the transit at the gap.</p>
+<h2 id="edge-cases-specific-not-hand-waved">Edge cases (specific, not hand-waved)<a class="headerlink" href="#edge-cases-specific-not-hand-waved" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Trace shorter than <code>min_stay_s</code> overall.</strong> Result: one TRANSIT covering everything. Correct — we don't have evidence of a stay.</li>
+<li><strong>Boundary oscillation (drifts in/out at R±ε).</strong> The running-mean anchor + grace window <code>T</code> jointly absorb this. We still emit a final <code>envelope_radius_m</code> reflecting the max observed reach; a downstream consumer can flag stays where this exceeds R as "loose."</li>
+<li><strong>Long stationary segment (device offline / dwelling).</strong> Already aggregated upstream. One segment = one stay if it meets <code>min_stay_s</code>. No special case.</li>
+<li><strong>Stale-position devices.</strong> Out of scope; assumed handled by step 4b before this layer runs.</li>
+<li><strong>Trace gaps (device offline).</strong> A gap ≥ <code>T</code> between consecutive <code>end_ts</code> and next <code>start_ts</code> closes the current episode regardless of envelope. Prevents a multi-day device outage from being absorbed into a stay.</li>
+<li><strong>Drive-in-circles-around-depot.</strong> Running centroid anchors at depot; all loops fit within R; one large STAY emitted. Correct.</li>
+<li><strong>Pass-through a known destination without stopping.</strong> Stay-duration threshold not met → folded into TRANSIT. The destination cluster (built fleet-wide upstream) still exists; episodes don't pretend to be it.</li>
+<li><strong>Two adjacent stays at distinct sub-locations within R of each other.</strong> Resolved by <code>R</code> choice. Documented as the calibration trade-off; the helper biases toward smaller R to favor splitting over merging.</li>
+</ol>
+<h2 id="episode-embedding">Episode embedding<a class="headerlink" href="#episode-embedding" title="Permanent link">&para;</a></h2>
+<p><strong>WHY.</strong> The point of the layer is to make episodes the unit of similarity search. Pooling segment vectors gives a fixed-width per-episode vector independent of <code>n_segments</code>.</p>
+<p><strong>HOW.</strong> Given segment embeddings <code>V ∈ R^(N,D)</code>:</p>
+<ul>
+<li>For each episode, take its rows of <code>V</code>.</li>
+<li>Pool to fixed width: <code>concat(mean, std, max-by-magnitude)</code> → <code>3D</code>. Captures central tendency, internal variability, and the most extreme single moment.</li>
+<li>Append episode-level scalars: <code>[log1p(duration_s), log1p(path_length_m), n_segments, type_one_hot(2)]</code> → <code>+5</code>.</li>
+<li>L2-normalize the concat.</li>
+</ul>
+<p>For D=81 segment vectors → 243 + 5 = 248-dim episode vector. Optionally train a single PCA on episode vectors to compress to 64-dim once; not required for v1.</p>
+<h2 id="episode-similarity">Episode similarity<a class="headerlink" href="#episode-similarity" title="Permanent link">&para;</a></h2>
+<p><strong>WHY.</strong> Replaces the current "same-route + closest duration" mission-similarity heuristic with real semantic similarity at a meaningful granularity.</p>
+<p><strong>HOW.</strong> FAISS <code>IndexFlatIP</code> over L2-normalized episode vectors. Re-uses the existing <code>search.py</code> infrastructure. Optional pre-filter: type (STAY-vs-TRANSIT), entity, time window. No same-route restriction — that was the limitation we're trying to lift.</p>
+<h2 id="calibration-helper">Calibration helper<a class="headerlink" href="#calibration-helper" title="Permanent link">&para;</a></h2>
+<p><strong>WHY.</strong> <code>R</code> is the one parameter the library cannot pick blind; it depends on the physical scale of the user's domain. We can suggest it from the data instead of asking the user to guess.</p>
+<p><strong>HOW.</strong> For each <code>STOP_DWELL</code> segment in a sample of the user's data, compute the 95th-percentile radius of its constituent pings around their centroid (approximated by start/end midpoint when ping-level data isn't available). Output the 75th percentile of those radii as suggested <code>R</code>, plus the full distribution histogram. Rationale: percentile-based statistics survive long tails; 75th leans toward separation over over-merging.</p>
+<h2 id="scale-presets">Scale presets<a class="headerlink" href="#scale-presets" title="Permanent link">&para;</a></h2>
+<p>Defaults shipped for the obvious classes. User can override or run calibration.</p>
+<div class="highlight"><pre><span></span><code><span class="n">SCALE_PRESETS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;logistics_vehicle&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">R_m</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>  <span class="n">T_s</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>  <span class="n">min_stay_s</span><span class="o">=</span><span class="mi">180</span><span class="p">),</span>
+    <span class="s2">&quot;maritime_vessel&quot;</span><span class="p">:</span>   <span class="nb">dict</span><span class="p">(</span><span class="n">R_m</span><span class="o">=</span><span class="mi">1500</span><span class="p">,</span> <span class="n">T_s</span><span class="o">=</span><span class="mi">1800</span><span class="p">,</span> <span class="n">min_stay_s</span><span class="o">=</span><span class="mi">1800</span><span class="p">),</span>
+    <span class="s2">&quot;wildlife_mammal&quot;</span><span class="p">:</span>   <span class="nb">dict</span><span class="p">(</span><span class="n">R_m</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="n">T_s</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>  <span class="n">min_stay_s</span><span class="o">=</span><span class="mi">300</span><span class="p">),</span>
+    <span class="s2">&quot;mobile_phone&quot;</span><span class="p">:</span>      <span class="nb">dict</span><span class="p">(</span><span class="n">R_m</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="n">T_s</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span>  <span class="n">min_stay_s</span><span class="o">=</span><span class="mi">600</span><span class="p">),</span>
+    <span class="s2">&quot;pedestrian&quot;</span><span class="p">:</span>        <span class="nb">dict</span><span class="p">(</span><span class="n">R_m</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>   <span class="n">T_s</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>  <span class="n">min_stay_s</span><span class="o">=</span><span class="mi">120</span><span class="p">),</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="where-this-slots-in">Where this slots in<a class="headerlink" href="#where-this-slots-in" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>... step 9 build_indices (segment embeddings + FAISS)
+   ↓
+   step 9b detect_episodes      ← NEW, this layer
+   ↓
+   step 9c embed_episodes       ← NEW, this layer
+   ↓
+   step 10 build_missions (now reads episodes, not raw segments, for grouping)
+   ↓
+   step 11 destination_index
+</code></pre></div>
+<p>Missions become "sequences of episodes bracketed by long stays." Routes become "(start_stay_anchor, end_stay_anchor) pairs." The mission similarity endpoint pivots from <code>route_id</code>-filter + duration-rank to episode-vector FAISS search with optional filters.</p>
+<h2 id="what-complete-looks-like">What "complete" looks like<a class="headerlink" href="#what-complete-looks-like" title="Permanent link">&para;</a></h2>
+<p>A v1 deliverable that ships, not a research project. Checklist:</p>
+<ul>
+<li>[ ] <code>episode_layer/episode.py</code> — <code>detect_episodes(segments_df, R_m, T_s, min_stay_s) -&gt; episodes_df</code>. Pure function, no I/O.</li>
+<li>[ ] <code>episode_layer/embed.py</code> — <code>embed_episodes(episodes_df, segment_vectors, segments_df) -&gt; (np.ndarray, list[episode_id])</code>.</li>
+<li>[ ] <code>episode_layer/calibrate.py</code> — <code>suggest_radius(segments_df, percentile=0.75) -&gt; (float, hist)</code>.</li>
+<li>[ ] <code>episode_layer/presets.py</code> — <code>SCALE_PRESETS</code> dict.</li>
+<li>[ ] <code>episode_layer/tests/</code> — synthetic-trace unit tests covering: simple stay, simple transit, depot-loop stay, boundary oscillation, gap-split, sub-min-stay rejection, two-stays-too-close. ≥ 80% line coverage on <code>episode.py</code>.</li>
+<li>[ ] <code>scripts/run_episodes.sh</code> — local runner: reads <code>segments_missions.parquet</code>, writes <code>episodes.parquet</code> + <code>episode_vectors.npz</code>.</li>
+<li>[ ] <code>api/main.py</code> additions: <code>GET /episodes/{id}</code>, <code>GET /episodes/{id}/similar?k=N&amp;type=STAY|TRANSIT</code>. No removal of existing endpoints in v1.</li>
+<li>[ ] Validation run on at least one non-fleet dataset (Geolife or open AIS slice). Document: did the calibrated <code>R</code> produce sane stays? Yes/no with histogram.</li>
+<li>[ ] <code>episode_layer/README.md</code> — 1-page quickstart with the input/output contract above.</li>
+</ul>
+<p>Out of scope for v1:
+- Learned (contrastive) episode embeddings. The pooled baseline lands first.
+- Replacing the mission layer. Episodes are added alongside; missions keep their current contract until the migration step is its own design doc.
+- Streaming / incremental episode detection. Batch only in v1.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

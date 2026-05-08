@@ -1,0 +1,3 @@
+# `trajkit.types`
+
+::: trajkit.types

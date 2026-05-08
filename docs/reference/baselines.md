@@ -1,0 +1,3 @@
+# `trajkit.baselines`
+
+::: trajkit.baselines

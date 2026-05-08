@@ -1,0 +1,2686 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Behavioral primitives for spatial-temporal traces">
+      
+      
+      
+        <link rel="canonical" href="https://github.com/darmaaz/trajkit/design/LIBRARY/">
+      
+      
+        <link rel="prev" href="../../concepts/parameters/">
+      
+      
+        <link rel="next" href="../schemas/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Library Plan — Shape, Scope, Extraction - trajkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#library-plan-shape-scope-extraction" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="trajkit" class="md-header__button md-logo" aria-label="trajkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            trajkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Library Plan — Shape, Scope, Extraction
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/darmaaz/trajkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    darmaaz/trajkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="trajkit" class="md-nav__button md-logo" aria-label="trajkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    trajkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/darmaaz/trajkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    darmaaz/trajkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../concepts/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Plan — Shape, Scope, Extraction
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Plan — Shape, Scope, Extraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-out-of-scope-explicit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Out of scope (explicit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-library-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Library name
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-module-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Module shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-api-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. API layers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. API layers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#l1-pure-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L1 — pure functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l2-entity-iterator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L2 — entity iterator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l3-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L3 — runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l15-pass-2-functions-cross-entity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L1.5 — pass-2 functions (cross-entity)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#v1-public-skeleton" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v1 public skeleton
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gotchas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-data-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Data contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-io-storage-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. I/O &amp; storage conventions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. I/O &amp; storage conventions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-parameter-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Parameter contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-domain-extensibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Domain extensibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-dependency-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Dependency policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-repo-packaging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Repo &amp; packaging
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-performance-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Performance contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Performance contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-testing-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Testing strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#14-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        14. Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-extraction-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        15. Extraction plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#16-licensing-attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        16. Licensing &amp; attribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#17-v1-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        17. v1 scope
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="17. v1 scope">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ships-in-v1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ships in v1
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deferred-to-v11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deferred to v1.1+
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#out-of-scope-indefinitely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of scope indefinitely
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#18-decision-register-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        18. Decision register (open)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-complete-looks-like-for-this-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "complete" looks like for this plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schemas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modules
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Modules
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../clean/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.clean
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.segment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../episode/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Episode Layer — Design Sketch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.embed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    trajkit.compare
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/clean/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    clean
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/segment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    segment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/episode/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    episode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/embed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    embed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/compare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compare
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    io
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/runner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/baselines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    baselines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/presets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    presets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Goal
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-out-of-scope-explicit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Out of scope (explicit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-library-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Library name
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-module-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Module shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-api-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. API layers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. API layers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#l1-pure-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L1 — pure functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l2-entity-iterator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L2 — entity iterator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l3-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L3 — runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#l15-pass-2-functions-cross-entity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        L1.5 — pass-2 functions (cross-entity)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#v1-public-skeleton" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v1 public skeleton
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gotchas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-data-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Data contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-io-storage-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. I/O &amp; storage conventions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. I/O &amp; storage conventions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-parameter-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Parameter contract
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-domain-extensibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Domain extensibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-dependency-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Dependency policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-repo-packaging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Repo &amp; packaging
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-performance-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Performance contract
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Performance contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-testing-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Testing strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#14-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        14. Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-extraction-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        15. Extraction plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#16-licensing-attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        16. Licensing &amp; attribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#17-v1-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        17. v1 scope
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="17. v1 scope">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ships-in-v1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ships in v1
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deferred-to-v11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deferred to v1.1+
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#out-of-scope-indefinitely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of scope indefinitely
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gotchas_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#18-decision-register-open" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        18. Decision register (open)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-complete-looks-like-for-this-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "complete" looks like for this plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="library-plan-shape-scope-extraction">Library Plan — Shape, Scope, Extraction<a class="headerlink" href="#library-plan-shape-scope-extraction" title="Permanent link">&para;</a></h1>
+<p>Cross-cutting design for the publishable package. Per-module design docs live alongside this one (<code>episode_layer/DESIGN.md</code> etc.). This file decides <em>what the library is</em>, not <em>how each algorithm works</em>.</p>
+<h2 id="1-goal">1. Goal<a class="headerlink" href="#1-goal" title="Permanent link">&para;</a></h2>
+<p>A pip-installable Python library that turns continuous, noisy spatial-temporal traces into a queryable space of comparable behavioral primitives — usable by someone who has never seen our fleet data. Three primitive operations:</p>
+<ol>
+<li><strong>Discretize</strong> — pings → typed segments → episodes (multi-scale).</li>
+<li><strong>Embed</strong> — episodes (and segments) → fixed-width vectors with context-aware baselining.</li>
+<li><strong>Compare</strong> — vector similarity search and cohort-relative anomaly scoring.</li>
+</ol>
+<p>Defaults survive at minimum two non-fleet domains (target: pedestrian + maritime). If they don't, we don't publish — we have an internal tool, not a library.</p>
+<h2 id="2-out-of-scope-explicit">2. Out of scope (explicit)<a class="headerlink" href="#2-out-of-scope-explicit" title="Permanent link">&para;</a></h2>
+<p>To prevent feature creep, these are <strong>not</strong> library responsibilities:</p>
+<ul>
+<li>Hosted UI / SaaS / web service. (The current FastAPI + Leaflet stays in the consumer repo as an example.)</li>
+<li>Streaming / online detection. Batch only in v1.</li>
+<li>Geometry-heavy GIS (buffers, intersections, polygon ops). Use shapely/geopandas separately.</li>
+<li>ML training framework. We ship vectors; users train downstream models.</li>
+<li>Trajectory storage. We read/write parquet; we don't replace a database.</li>
+<li>Map visualization. We may ship a tiny <code>viz</code> extra (matplotlib/folium), nothing heavier.</li>
+<li>Coordinate-reference handling beyond WGS84 in/out. Users project before/after if they need to.</li>
+</ul>
+<h2 id="3-library-name">3. Library name<a class="headerlink" href="#3-library-name" title="Permanent link">&para;</a></h2>
+<p><strong>Criteria.</strong> ≤ 8 chars, pronounceable, low-collision on PyPI + GitHub, evokes the discretize-and-search semantics, acceptable in a corporate stack.</p>
+<p><strong>Shortlist.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>For</th>
+<th>Against</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>trajkit</code></td>
+<td>descriptive, short</td>
+<td>generic; PyPI status unverified</td>
+</tr>
+<tr>
+<td><code>trajix</code></td>
+<td>distinctive, pronounceable</td>
+<td>meaningless until you know</td>
+</tr>
+<tr>
+<td><code>dwellkit</code></td>
+<td>evokes the stay primitive</td>
+<td>overweights stays vs. transits</td>
+</tr>
+<tr>
+<td><code>passage</code></td>
+<td>journeys + visits</td>
+<td>too common a word, likely taken</td>
+</tr>
+<tr>
+<td><code>wayward</code></td>
+<td>trace-shaped, available-feeling</td>
+<td>semantic mismatch (means "off-path")</td>
+</tr>
+<tr>
+<td><code>kinet</code></td>
+<td>"kinetic" stem, short</td>
+<td>ambiguous</td>
+</tr>
+<tr>
+<td><code>trkit</code></td>
+<td>very short</td>
+<td>unreadable</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recommendation.</strong> <code>trajkit</code> for the working name; do a PyPI/GitHub/Google check before committing. If <code>trajkit</code> collides, <code>trajix</code>. The choice gates nothing technical — just rename later — but PyPI registration is first-come.</p>
+<p><strong>Gotcha.</strong> PyPI squatting is real. Reserve the chosen name with a stub release before announcing publicly.</p>
+<h2 id="4-module-shape">4. Module shape<a class="headerlink" href="#4-module-shape" title="Permanent link">&para;</a></h2>
+<p>Single package, five modules, monolithic install with <code>extras_require</code> for optional features. Splitting into independent packages is a future migration, not a v1 concern.</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Responsibility</th>
+<th>Explicitly NOT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>trajkit.clean</code></td>
+<td>Quality flags, drift detection, duplicate handling, gap flagging, stale-position merge</td>
+<td>OSM enrichment, projection conversion</td>
+</tr>
+<tr>
+<td><code>trajkit.segment</code></td>
+<td>Hysteresis state machine + 4-state taxonomy + sustained-bearing splits → segments</td>
+<td>Per-segment feature engineering beyond the type label</td>
+</tr>
+<tr>
+<td><code>trajkit.episode</code></td>
+<td>Spatial-envelope episode detection (STAY/TRANSIT)</td>
+<td>Place clustering across entities</td>
+</tr>
+<tr>
+<td><code>trajkit.embed</code></td>
+<td>Per-segment + per-episode vectorization, context-aware z-score baselining</td>
+<td>Learned/contrastive embeddings (later as a separate extra)</td>
+</tr>
+<tr>
+<td><code>trajkit.compare</code></td>
+<td>FAISS index construction + similarity search + cohort-relative anomaly scores</td>
+<td>Anomaly explanation UI</td>
+</tr>
+</tbody>
+</table>
+<p>Plus:</p>
+<ul>
+<li><code>trajkit.types</code> — Pydantic param models, dataframe schemas (Pandera).</li>
+<li><code>trajkit.presets</code> — <code>SCALE_PRESETS</code> for known domain classes.</li>
+<li><code>trajkit.testing</code> — synthetic-trace generators, fixture builders. Importable by users for their own tests.</li>
+<li><code>trajkit.cli</code> — thin argparse wrappers around the modules. Not the import surface; opt-in.</li>
+</ul>
+<p><strong>Out of the package, into a sibling repo (<code>trajkit-fleet/</code> or just <code>examples/fleet/</code>):</strong> mission grouping, route derivation, destination clustering, OSM road/POI enrichment. These are opinionated applications, not primitives. Keeping them out of the core preserves the cross-domain story.</p>
+<p><strong>Gotcha.</strong> If we put missions/routes inside <code>trajkit</code>, we silently bake in the fleet-vehicle scale (≥30min dwells, road-class features) and lose maritime/wildlife/mobile users. Hard line.</p>
+<h2 id="5-api-layers">5. API layers<a class="headerlink" href="#5-api-layers" title="Permanent link">&para;</a></h2>
+<p>Three layers, one job each. The natural unit is <strong>one entity's pings</strong> — operations on different entities are independent, and a single entity's history fits in memory comfortably even for huge fleets. The library is designed around iterating over entities, not around a single dataset DataFrame.</p>
+<div class="highlight"><pre><span></span><code>L1  Pure functions    one entity in, one entity out, no I/O
+L2  Entity iterator   yields (entity_id, pings_df) from a source; validates at boundary
+L3  Runner            iterator + L1 + atomic per-entity write, parallel
+                      ──────────────────────────────────────────────
+L1.5  Pass-2 functions cohort-level reads of L3 output (baselines, etc.)
+</code></pre></div>
+<h3 id="l1-pure-functions">L1 — pure functions<a class="headerlink" href="#l1-pure-functions" title="Permanent link">&para;</a></h3>
+<p><strong>WHY.</strong> Composable, unit-testable, framing-agnostic (notebook, custom pipeline, third-party orchestrator). The contract is the data shape, not the call site.</p>
+<p><strong>HOW.</strong> Each function takes one entity's frame plus a Params instance; returns one entity's frame. No global state, no I/O, no logging side effects. Trusts the schema — validation lives in L2. Single-entity invariant is asserted (one unique <code>entity_id</code> value); multi-entity inputs are a user error, not silently grouped.</p>
+<h3 id="l2-entity-iterator">L2 — entity iterator<a class="headerlink" href="#l2-entity-iterator" title="Permanent link">&para;</a></h3>
+<p><strong>WHY.</strong> The streaming layer the user touches when L3 is too opinionated. Decouples sources (parquet, Arrow, in-memory frame, custom DB query) from the L1 contract.</p>
+<p><strong>HOW.</strong> <code>iter_entities(source) -&gt; Iterator[(str, pd.DataFrame)]</code>. Source is a parquet path (Hive-partitioned by <code>entity_id</code> is the fast path), an Arrow <code>Table</code>, or an existing DataFrame. <code>format="csv"</code> is tolerated for tutorial datasets like Geolife. Custom sources (Postgres, BigQuery, S3 manifests) are user-supplied iterators conforming to the same tuple contract — no plugin system, just any callable that yields tuples. Schema validation runs once per yielded frame using <code>PingsSchema</code>; failure raises (no skip mode in v1).</p>
+<h3 id="l3-runner">L3 — runner<a class="headerlink" href="#l3-runner" title="Permanent link">&para;</a></h3>
+<p><strong>WHY.</strong> Most users don't want to write the iterator + apply + write loop themselves. Single entry point that turns "input parquet, output dir, params" into a complete pipeline run.</p>
+<p><strong>HOW.</strong> <code>process(source, sink_dir, params, stages=("clean","segment","episode","embed_segments"), n_workers=1) -&gt; RunReport</code>. Iterates entities, applies stages in fixed order, writes Hive-partitioned parquet per stage. Multiprocessing pool over the iterator (<code>Pool.imap_unordered</code>); per-entity write to <code>sink_dir/&lt;stage&gt;/_tmp/entity_id=&lt;X&gt;/</code> then atomic rename for crash safety; existing final files are skipped on re-run for cheap resume. Per-entity exceptions abort the whole run in v1 (no skip-on-failure mode); the report names the failing entity and stage.</p>
+<h3 id="l15-pass-2-functions-cross-entity">L1.5 — pass-2 functions (cross-entity)<a class="headerlink" href="#l15-pass-2-functions-cross-entity" title="Permanent link">&para;</a></h3>
+<p><strong>WHY.</strong> Some computations need a global view: fleet-wide z-score baselines, anomaly model fitting, destination clustering. They don't fit per-entity iteration. Surfacing them as a separate phase keeps the per-entity contract clean and makes the cohort dependency visible.</p>
+<p><strong>HOW.</strong> Named functions that read pass-1's Hive output via <code>pyarrow.dataset</code> or <code>pandas.read_parquet</code>, compute a small artifact, persist it. No parallelism — these are whole-cohort operations by definition. Pass-2 input (segments, episodes) is 1–3 orders of magnitude smaller than pings, so memory pressure is not a concern.</p>
+<div class="highlight"><pre><span></span><code><span class="n">trajkit</span><span class="o">.</span><span class="n">fit_baselines</span><span class="p">(</span><span class="n">segments_dir</span><span class="p">,</span> <span class="n">out_path</span><span class="p">,</span> <span class="n">cohort_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;entity_id&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Baselines</span>  <span class="c1"># v1</span>
+<span class="c1"># trajkit.fit_anomaly_model(...)                                                       # v1.1</span>
+<span class="c1"># trajkit.cluster_destinations(...)                                                    # extras, not core</span>
+</code></pre></div>
+<h3 id="v1-public-skeleton">v1 public skeleton<a class="headerlink" href="#v1-public-skeleton" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># L1 — pure, per-entity</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">pings_df</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>                              <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">merge_stale_positions</span><span class="p">(</span><span class="n">pings_df</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>              <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="n">pings_df</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>                            <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">aggregate_segments</span><span class="p">(</span><span class="n">pings_df</span><span class="p">)</span>                         <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">detect_episodes</span><span class="p">(</span><span class="n">segments_df</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>                 <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">embed_segments</span><span class="p">(</span><span class="n">segments_df</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">features</span><span class="o">=</span><span class="p">())</span>     <span class="o">-&gt;</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">embed_episodes</span><span class="p">(</span><span class="n">episodes_df</span><span class="p">,</span> <span class="n">seg_vectors</span><span class="p">,</span> <span class="n">seg_ids</span><span class="p">)</span>    <span class="o">-&gt;</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span>
+
+<span class="c1"># L2 — iterator</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">iter_entities</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>           <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[(</span><span class="nb">str</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)]</span>
+
+<span class="c1"># L3 — runner</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">sink_dir</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">stages</span><span class="o">=...</span><span class="p">,</span> <span class="n">n_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunReport</span>
+
+<span class="c1"># Pass-2 — cohort</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">fit_baselines</span><span class="p">(</span><span class="n">segments_dir</span><span class="p">,</span> <span class="n">out_path</span><span class="p">,</span> <span class="n">cohort_keys</span><span class="p">)</span>   <span class="o">-&gt;</span> <span class="n">Baselines</span>
+
+<span class="c1"># Compare — vector ops, neither per-entity nor pass-2</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">compare</span><span class="o">.</span><span class="n">build_index</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;cosine&quot;</span><span class="p">)</span>   <span class="o">-&gt;</span> <span class="n">Index</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">compare</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>      <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Hit</span><span class="p">]</span>
+
+<span class="c1"># Presets</span>
+<span class="n">trajkit</span><span class="o">.</span><span class="n">presets</span><span class="o">.</span><span class="n">SCALE_PRESETS</span>                                <span class="c1"># logistics_vehicle, pedestrian</span>
+</code></pre></div>
+<h3 id="gotchas">Gotchas<a class="headerlink" href="#gotchas" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>L1 single-entity invariant.</strong> Asserted on entry; multi-entity inputs raise. Avoids silent <code>groupby</code> semantics that would change with parameter order.</li>
+<li><strong>Pickling for multiprocessing.</strong> L1 functions, Params, and any user-supplied feature plugins must be top-level importable. Lambdas in feature plugins silently break L3 with confusing <code>PicklingError</code> traces. Documented; tested against in CI.</li>
+<li><strong>Per-worker memory.</strong> Each worker holds one entity. With <code>n_workers=8</code> and ~500 MB max per entity, peak ≈ 4 GB. Document so users with massive entities know to drop <code>n_workers</code>.</li>
+<li><strong>Resumability is per-entity, not per-stage.</strong> Existing <code>&lt;stage&gt;/entity_id=&lt;X&gt;/data.parquet</code> causes the entity to be skipped for that stage. To re-run, delete that path. Document; no <code>--force</code> flag in v1.</li>
+<li><strong>Pass-2 reads partial cohorts silently.</strong> If pass-1 partially failed, <code>fit_baselines</code> computes against whatever entities completed. Surface the count in the log; do not silently proceed without it.</li>
+<li><strong>Mutable default Params.</strong> Use <code>params: Params | None = None</code> + <code>params or Params()</code> rather than <code>params: Params = Params()</code> to avoid Python's class-level default trap, even though Pydantic v2 frozen models are technically safe.</li>
+</ul>
+<h2 id="6-data-contract">6. Data contract<a class="headerlink" href="#6-data-contract" title="Permanent link">&para;</a></h2>
+<p>The library's public API surface includes its DataFrame column names. Renames are breaking changes. Schemas are codified twice — once for runtime validation, once for storage — kept consistent by tests.</p>
+<p><strong>Tooling.</strong>
+- <strong>Pandera</strong> schemas for runtime validation at the L2 iterator boundary and at pass-2 function boundaries.
+- <strong>Arrow</strong> schemas for parquet I/O — types must round-trip through storage cleanly.
+- Both definitions live side-by-side in <code>trajkit.types</code>. A test asserts they are consistent (column names, dtypes, nullability). This avoids the silent drift where "valid by Pandera" doesn't survive parquet write/read.
+- Schemas are exported so consumers can validate their own frames before passing them in.</p>
+<p><strong>Validation runs at exactly one place: the L2 boundary.</strong> L1 pure functions trust the contract for speed. Pass-2 functions re-validate their reads, since pass-1 output has crossed a parquet round-trip.</p>
+<p><strong>Canonical input — pings frame:</strong></p>
+<table>
+<thead>
+<tr>
+<th>col</th>
+<th>dtype</th>
+<th>required</th>
+<th>notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity_id</code></td>
+<td>str</td>
+<td>yes</td>
+<td>vehicle/vessel/animal/device id</td>
+</tr>
+<tr>
+<td><code>ts</code></td>
+<td>datetime64[ns, UTC]</td>
+<td>yes</td>
+<td>tz-aware, UTC</td>
+</tr>
+<tr>
+<td><code>lat</code>, <code>lon</code></td>
+<td>float64</td>
+<td>yes</td>
+<td>WGS84</td>
+</tr>
+<tr>
+<td><code>speed_ms</code></td>
+<td>float64</td>
+<td>no</td>
+<td>derived if absent</td>
+</tr>
+<tr>
+<td><code>bearing_deg</code></td>
+<td>float64</td>
+<td>no</td>
+<td>derived if absent</td>
+</tr>
+</tbody>
+</table>
+<p>Sorted by (<code>entity_id</code>, <code>ts</code>). Duplicate (<code>entity_id</code>, <code>ts</code>) rows raise.</p>
+<p><strong>Gotchas (each enforced by schema):</strong></p>
+<ul>
+<li>Naive timestamps → reject with a clear error. Mixed TZ is a footgun.</li>
+<li>Multiple entities per frame is the default, not an error. Avoids forcing per-entity DataFrames on users who already have a fleet table.</li>
+<li><code>lat</code>/<code>lon</code> ranges validated. Subtle bug: someone passes (lon, lat) reversed — schema range check catches it.</li>
+<li>Sort assertion is a check, not a side-effect. The library does not silently sort; it raises if unsorted. Silent sort breaks streaming-style chunked use.</li>
+<li><code>entity_id</code> must be string. Numeric ids cause grief downstream (FAISS payload encoding, group-by performance).</li>
+</ul>
+<h2 id="7-io-storage-conventions">7. I/O &amp; storage conventions<a class="headerlink" href="#7-io-storage-conventions" title="Permanent link">&para;</a></h2>
+<p><strong>WHY.</strong> A per-entity contract needs an I/O contract. Without one, every consumer reinvents partitioning and discovers it differs across environments.</p>
+<p><strong>Format.</strong> Parquet, snappy compression, for everything the library writes. CSV is tolerated as input via <code>iter_entities(..., format="csv")</code> for tutorial datasets but is never produced by a library write.</p>
+<p><strong>Layout — Hive-partitioned by <code>entity_id</code>, per stage:</strong></p>
+<div class="highlight"><pre><span></span><code>sink_dir/
+├── pings_clean/entity_id=A/data.parquet
+├── pings_clean/entity_id=B/data.parquet
+├── segments/entity_id=A/data.parquet
+├── episodes/entity_id=A/data.parquet
+├── segment_vectors/entity_id=A/data.parquet   # vectors as fixed-size list columns
+└── episode_vectors/entity_id=A/data.parquet
+</code></pre></div>
+<p><strong>WHY Hive.</strong> <code>pyarrow.dataset</code>, <code>pandas.read_parquet</code>, <code>polars.scan_parquet</code>, and DuckDB all read this layout natively with no custom code. Pass-2 functions trivially scan a stage root. Per-entity directories (<code>sink_dir/entity_id=A/segments.parquet</code>) work but force every downstream tool to know our custom layout.</p>
+<p><strong>Vectors as parquet, not <code>.npz</code>.</strong> Arrow fixed-size list columns round-trip cleanly. Mild storage overhead vs <code>.npz</code>; the gain is layout consistency — every artifact is parquet, every tool reads parquet.</p>
+<p><strong>Atomicity.</strong> Per-entity writes go to <code>sink_dir/&lt;stage&gt;/_tmp/entity_id=&lt;X&gt;/data.parquet</code>, then renamed to the final path on success. Crash mid-write leaves the target unmoved; re-run resumes by skipping entities whose final file exists.</p>
+<p><strong>Vector dtype.</strong> <code>float32</code>, not <code>float64</code>. Halves storage; FAISS expects <code>float32</code> anyway.</p>
+<h3 id="gotchas_1">Gotchas<a class="headerlink" href="#gotchas_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Schema evolution.</strong> Add a column to a stage in v0.x → old per-entity files don't have it. Each schema carries a <code>schema_version</code> field; readers tolerate missing-with-default for that version. Plan from v0.1 release, not retrofitted.</li>
+<li><strong>Empty entities.</strong> An entity with zero rows after <code>clean</code> still produces a (potentially zero-row) per-entity file so resumability works. Don't skip empty entities silently — that breaks idempotent re-runs.</li>
+<li><strong>Un-partitioned input.</strong> If the source parquet isn't Hive-partitioned by <code>entity_id</code> and isn't sorted, <code>iter_entities</code> falls back to a <code>groupby</code> pass that loads everything. Detected at read time; logged as a warning. Repartition helper deferred to v1.1; users with un-partitioned input do the one-time repartition themselves in v1.</li>
+<li><strong>CSV is slow and dangerous.</strong> Type inference, mixed encodings, null sentinels. CSV is for tutorials and Geolife, not for production. Document; warn on first CSV read in a process.</li>
+<li><strong><code>_tmp</code> directory cleanup.</strong> A crashed run leaves <code>_tmp</code> directories behind. The runner cleans them on next start before iterating. Don't let them accumulate silently.</li>
+</ul>
+<h2 id="8-parameter-contract">8. Parameter contract<a class="headerlink" href="#8-parameter-contract" title="Permanent link">&para;</a></h2>
+<p>Each module exposes a Pydantic v2 model. Frozen, <code>extra='forbid'</code>. Reasoning:</p>
+<ul>
+<li><strong>Frozen</strong> — params are immutable in a run; mutation across a pipeline is a debugging nightmare we've all seen.</li>
+<li><strong><code>extra='forbid'</code></strong> — silently ignored typos in YAML configs are the worst class of bug. Make them errors.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">EpisodeParams</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">ConfigDict</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">extra</span><span class="o">=</span><span class="s1">&#39;forbid&#39;</span><span class="p">)</span>
+    <span class="n">R_m</span><span class="p">:</span> <span class="n">PositiveFloat</span>
+    <span class="n">T_s</span><span class="p">:</span> <span class="n">PositiveFloat</span>
+    <span class="n">min_stay_s</span><span class="p">:</span> <span class="n">PositiveFloat</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_preset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;EpisodeParams&quot;</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+<p><strong>Gotcha.</strong> YAML config loading: use <code>EpisodeParams.model_validate(yaml.safe_load(...))</code>. Don't accept dicts directly into the public function — that bypasses validation.</p>
+<h2 id="9-domain-extensibility">9. Domain extensibility<a class="headerlink" href="#9-domain-extensibility" title="Permanent link">&para;</a></h2>
+<p>The library generalizes via three plug points, no others:</p>
+<ol>
+<li><strong>Scale presets.</strong> <code>SCALE_PRESETS["maritime_vessel"]</code> returns a bundle of Params instances tuned for that scale. Users override fields without rewriting the bundle.</li>
+<li><strong>Feature plugins (embed only).</strong> A <code>FeaturePlugin</code> Protocol contributes a fixed-width block to the segment vector. Users supply their own (e.g., a marine-traffic-zone block, an animal habitat-class block) by implementing <code>name</code>, <code>dim</code>, <code>compute(segments_df) -&gt; np.ndarray</code>. The core 81-dim recipe ships as a bundle of default plugins; nothing is hard-coded.</li>
+<li><strong>Cohort keys (baselining).</strong> <code>baseline_zscores(segments_df, cohort_keys=["road_class", "entity_id"])</code> lets the user specify what "peer group" means for their domain. Default is <code>["entity_id"]</code> plus a global fleet baseline.</li>
+</ol>
+<p><strong>What is NOT a plug point:</strong> the segmentation taxonomy (4 states are fixed in v1), the episode closure rule (spatial-envelope is fixed in v1). Adding more is a v2 conversation.</p>
+<p><strong>Gotcha.</strong> Feature plugins must declare their output <code>dim</code> up front; we concat blocks by index, so a plugin that returns a variable-width vector breaks the contract. Schema-check every plugin output in tests.</p>
+<h2 id="10-dependency-policy">10. Dependency policy<a class="headerlink" href="#10-dependency-policy" title="Permanent link">&para;</a></h2>
+<p>Lean by default; heavy deps go in extras.</p>
+<table>
+<thead>
+<tr>
+<th>Dep</th>
+<th>Status</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pandas&gt;=2.1</code></td>
+<td>required</td>
+<td>core dataframe</td>
+</tr>
+<tr>
+<td><code>numpy</code></td>
+<td>required</td>
+<td>vectors</td>
+</tr>
+<tr>
+<td><code>pydantic&gt;=2</code></td>
+<td>required</td>
+<td>params + validation</td>
+</tr>
+<tr>
+<td><code>pandera</code></td>
+<td>required</td>
+<td>schema validation</td>
+</tr>
+<tr>
+<td><code>h3&gt;=4</code></td>
+<td>required</td>
+<td>spatial indexing; pin major to avoid the v3→v4 API break</td>
+</tr>
+<tr>
+<td><code>pyproj</code></td>
+<td>required</td>
+<td>great-circle / projection helpers</td>
+</tr>
+<tr>
+<td><code>scikit-learn</code></td>
+<td>required</td>
+<td>IsolationForest, scalers (lightweight slice)</td>
+</tr>
+<tr>
+<td><code>faiss-cpu</code></td>
+<td><strong>extra <code>[search]</code></strong></td>
+<td>FAISS wheels are platform-fragile; not everyone needs it</td>
+</tr>
+<tr>
+<td><code>matplotlib</code></td>
+<td>extra <code>[viz]</code></td>
+<td>optional histogram helpers</td>
+</tr>
+<tr>
+<td><code>polars</code></td>
+<td>extra <code>[fast]</code></td>
+<td>future perf path; not exercised in v1</td>
+</tr>
+<tr>
+<td><code>geopandas</code></td>
+<td><strong>forbidden</strong></td>
+<td>pulls GDAL; install hell on Windows + Apple Silicon</td>
+</tr>
+<tr>
+<td><code>osmnx</code></td>
+<td><strong>out of package</strong></td>
+<td>OSM enrichment lives in the fleet examples repo</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gotcha.</strong> <code>faiss-cpu</code> on Apple Silicon: works via conda-forge, fragile via pip. Document the install path in the README, don't pretend it's transparent.</p>
+<p><strong>Gotcha.</strong> <code>h3</code> v3 vs v4: function names differ (<code>grid_ring</code> vs <code>k_ring</code>). Pin to v4 and document; the existing fleet code uses v4 already.</p>
+<h2 id="11-repo-packaging">11. Repo &amp; packaging<a class="headerlink" href="#11-repo-packaging" title="Permanent link">&para;</a></h2>
+<p><strong>Single repo, single package, src-layout.</strong> Standard modern Python.</p>
+<div class="highlight"><pre><span></span><code>&lt;library_repo_root&gt;/
+├── pyproject.toml
+├── src/trajkit/
+│   ├── clean/
+│   ├── segment/
+│   ├── episode/
+│   ├── embed/
+│   ├── compare/
+│   ├── types.py
+│   ├── presets.py
+│   └── testing/
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── fixtures/
+├── docs/             # MkDocs Material
+├── examples/         # runnable notebooks: geolife, ais
+└── CHANGELOG.md
+</code></pre></div>
+<p><strong><code>pyproject.toml</code></strong> points at <code>src/trajkit</code>, declares core + extras, sets <code>python_requires&gt;=3.10</code> (typing improvements + pandas 2.0 floor).</p>
+<p><strong>Versioning.</strong> Start at <code>0.1.0</code>. SemVer with the convention that <code>0.x.y</code> allows breaking changes in minor; we promote to <code>1.0.0</code> only after at least one external user has shipped against us.</p>
+<p><strong>Gotcha.</strong> Do not vendor or re-export DataFrame schemas from external libs (e.g., movingpandas). Coupling our public API to someone else's release schedule is a maintenance trap.</p>
+<h2 id="12-performance-contract">12. Performance contract<a class="headerlink" href="#12-performance-contract" title="Permanent link">&para;</a></h2>
+<p>Per-entity computation is the unit. The library never holds the full dataset in memory. Multiprocessing parallelism is over <code>iter_entities</code> at L3.</p>
+<p><strong>Targets</strong> (developer laptop, 8 GB free RAM, single entity at a time):</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Throughput</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clean</code></td>
+<td>1M pings/sec on the dedup/derive path</td>
+<td>100K pings/sec when stale-position merge runs</td>
+</tr>
+<tr>
+<td><code>segment</code></td>
+<td>500K pings/sec</td>
+<td></td>
+</tr>
+<tr>
+<td><code>detect_episodes</code></td>
+<td>10K segments/sec</td>
+<td></td>
+</tr>
+<tr>
+<td><code>embed_segments</code></td>
+<td>50K segments/sec per plugin block</td>
+<td></td>
+</tr>
+<tr>
+<td><code>compare.search</code></td>
+<td>&lt; 50 ms over 1M vectors, 81-dim</td>
+<td><code>IndexFlatIP</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Runner with <code>n_workers=8</code>.</strong> ~8 entities resident simultaneously, ~4 GB peak.</p>
+<p><strong>Pass-2 <code>fit_baselines</code>.</strong> Reads all segments into memory; for fleet scale (~750 entities, ~2M segments), ~500 MB working set. No parallelism — cohort operation by definition.</p>
+<p><strong>Engine.</strong> Vectorized pandas for v1. Polars rewrite is gated on profiling that shows pandas is the bottleneck (likely true for <code>clean</code> and <code>segment</code> at fleet scale). v1.1+ as <code>[fast]</code> extra.</p>
+<p><strong>Out of scope:</strong>
+- Streaming sub-entity (one entity that doesn't fit in RAM). Workaround: time-shard before <code>iter_entities</code>.
+- Distributed multi-node. Single-node multiprocessing only.
+- GPU FAISS, GPU embedding. Considered if a real user needs it.</p>
+<h3 id="gotchas_2">Gotchas<a class="headerlink" href="#gotchas_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>I/O contention at worker startup.</strong> All workers read parquet at once and saturate disk, not CPU. Tune <code>n_workers</code> to disk throughput on large entities, not core count.</li>
+<li><strong><code>pyarrow.dataset</code> overhead on small files.</strong> Per-entity files ≪ 1 MB pay non-trivial dataset-read overhead. For very small entities, batched <code>pd.read_parquet</code> is faster. Profile before optimizing.</li>
+<li><strong>Hidden quadratic features.</strong> Any spatial join in a feature plugin (POI lookup, marine zone) is O(N × M) without an index. h3 cell hashing keeps it linear; verify with a large synthetic frame in the plugin's own tests.</li>
+<li><strong>Pickling cost.</strong> Sending a 500 MB DataFrame between processes via pickle is slow. The runner does NOT broadcast data — each worker reads its own entity from parquet given an <code>(entity_id, source_path)</code> tuple. Don't pre-load and ship.</li>
+</ul>
+<h2 id="13-testing-strategy">13. Testing strategy<a class="headerlink" href="#13-testing-strategy" title="Permanent link">&para;</a></h2>
+<p>Three layers; hard rules about what each does.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lives in</th>
+<th>Speed</th>
+<th>Real data?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unit</td>
+<td><code>tests/unit/</code></td>
+<td>&lt;1s each</td>
+<td>no — synthetic only</td>
+</tr>
+<tr>
+<td>Integration</td>
+<td><code>tests/integration/</code></td>
+<td>&lt;30s total</td>
+<td>small open dataset bundled (≤ 1MB)</td>
+</tr>
+<tr>
+<td>Cross-domain validation</td>
+<td>separate repo <code>trajkit-validation/</code></td>
+<td>minutes</td>
+<td>Geolife + AIS + MoveBank slices</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Synthetic trace generator</strong> lives in <code>trajkit.testing</code> and is part of the public API — users test their own pipelines with it. Generates parametrized traces: simple stay, simple transit, depot-loop, oscillating-boundary, gap-split, multi-entity batch, drift-flagged pings, stale-position run.</p>
+<p><strong>Coverage targets.</strong> <code>episode.py</code> and <code>segment.py</code> each ≥ 80% line coverage at v1. Other modules ≥ 60%.</p>
+<p><strong>Gotcha.</strong> Snapshot tests against synthetic data for whole-pipeline output: useful, but every parameter tweak rewrites the snapshot. Use sparingly; prefer explicit assertions on properties (n_episodes, type distribution, anchor convergence).</p>
+<p><strong>Gotcha.</strong> Property-based tests (<code>hypothesis</code>) are valuable here — strategies for "monotonic timestamps within entity" and "lat/lon in bounds" catch invariant violations the static fixtures miss. Plan to add but don't gate v1 on them.</p>
+<h2 id="14-documentation">14. Documentation<a class="headerlink" href="#14-documentation" title="Permanent link">&para;</a></h2>
+<p>Three surfaces, three audiences:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Audience</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>README.md</code></td>
+<td>someone evaluating the library in 60s</td>
+<td>one-paragraph pitch + 10-line example + supported domains + install</td>
+</tr>
+<tr>
+<td>MkDocs site <code>docs/</code></td>
+<td>someone implementing</td>
+<td>Concept guides (what's an episode, what's calibration, what's a cohort), full API reference (auto-generated from docstrings), per-domain quickstarts (fleet, AIS, Geolife)</td>
+</tr>
+<tr>
+<td><code>CHANGELOG.md</code></td>
+<td>someone upgrading</td>
+<td>every breaking change called out with migration path</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Convention.</strong> Every public function has a docstring with: one-line summary, Args, Returns, Raises, Example. Lint with <code>pydocstyle</code> in CI.</p>
+<p><strong>Gotcha.</strong> The API reference has to render correctly on read-the-docs / mkdocs without us hand-curating every page. Tooling: <code>mkdocstrings[python]</code> with type hint introspection. Set this up early; retrofitting docstring style on 50 functions is painful.</p>
+<h2 id="15-extraction-plan">15. Extraction plan<a class="headerlink" href="#15-extraction-plan" title="Permanent link">&para;</a></h2>
+<p>The existing <code>fleet-intelligence</code> repo cannot break during extraction. It is the first consumer of the new library; it remains a runnable case study.</p>
+<p><strong>Phased migration:</strong></p>
+<ol>
+<li><strong>Phase 0 — scaffold.</strong> New repo <code>trajkit/</code> exists with <code>pyproject.toml</code>, empty src layout, CI green, schema types defined. No behavior moved. Existing <code>fleet-intelligence</code> unchanged.</li>
+<li><strong>Phase 1 — episode in trajkit.</strong> The episode_layer (which is greenfield) lands in <code>trajkit.episode</code> directly, never in <code>fleet_intelligence/layers/</code>. This validates the library's package conventions on something with no migration cost.</li>
+<li><strong>Phase 2 — clean migration.</strong> Lift <code>cleaning.py</code> + <code>stale_position_merge.py</code> into <code>trajkit.clean</code>. In <code>fleet-intelligence</code>, replace <code>from fleet_intelligence.layers.cleaning import …</code> with <code>from trajkit.clean import …</code>. Tests in both repos green before merging.</li>
+<li><strong>Phase 3 — segment, embed, compare</strong> in that order, same pattern.</li>
+<li><strong>Phase 4 — strip the duplicate code paths</strong> in <code>fleet-intelligence</code>. The <code>fleet_intelligence/layers/</code> package shrinks to only the opinionated, fleet-specific layers (mission_grouping, mission_aggregation, destination_embedding, feature_enrichment).</li>
+</ol>
+<p><strong>Gotcha.</strong> Tempting shortcut: keep shim modules in <code>fleet_intelligence</code> re-exporting from <code>trajkit</code> indefinitely. Cost: every upgrade has two import paths people use. Plan: shims allowed during a phase, deleted at phase end.</p>
+<p><strong>Gotcha.</strong> During phases 2–4, the existing API and frontend may need patching as columns/imports shift. Flag this in each PR; don't merge a phase that breaks <code>api/main.py</code>.</p>
+<h2 id="16-licensing-attribution">16. Licensing &amp; attribution<a class="headerlink" href="#16-licensing-attribution" title="Permanent link">&para;</a></h2>
+<p><strong>Default license:</strong> MIT for the library code. Reasoning: lowest friction, encourages adoption, mirrors <code>pandas</code>/<code>numpy</code> ecosystem norms.</p>
+<p><strong>Gotcha (must resolve before publishing).</strong> The fleet operator's contract may restrict open-sourcing IP developed using their data. Check the contract for derivative-works clauses. If restrictive: either (a) a clean-room rewrite from the design docs without referencing the existing repo, or (b) negotiate an MIT carve-out for the algorithmic code (data stays the operator's). This is a legal call, not an engineering one.</p>
+<p><strong>Attribution:</strong> if any module ever ingests OSM-derived data, ODbL attribution applies to that data. Documented in the relevant module's docstring; out of scope for v1 since OSM enrichment lives in the fleet examples repo.</p>
+<p><strong>Third-party licenses inventory:</strong> required deps' licenses must be compatible with MIT. <code>faiss</code> is MIT, <code>pandera</code> is MIT, <code>pydantic</code> is MIT, <code>h3</code> is Apache-2.0, <code>scikit-learn</code> is BSD-3 — all fine.</p>
+<h2 id="17-v1-scope">17. v1 scope<a class="headerlink" href="#17-v1-scope" title="Permanent link">&para;</a></h2>
+<p>Pinned scope for the first release. Each item not in v1 is documented as a v1.1+ opt-in addition that does not change the v1 contract — so users who upgrade later don't pay a migration cost.</p>
+<h3 id="ships-in-v1">Ships in v1<a class="headerlink" href="#ships-in-v1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All five core modules at L1: <code>clean</code>, <code>segment</code>, <code>episode</code>, <code>embed</code>, <code>compare</code>.</li>
+<li>L2 <code>iter_entities</code> accepting parquet path, Arrow <code>Table</code>, and in-memory DataFrame; <code>format="csv"</code> tolerated for tutorial datasets.</li>
+<li>L3 <code>process</code> runner with <code>n_workers</code> parameter, multiprocessing pool, Hive-partitioned output, atomic per-entity writes, resume-by-skipping-existing-files.</li>
+<li>Pass-2: <code>fit_baselines</code> only.</li>
+<li>Pandera + Arrow schemas for <code>pings</code>, <code>segments</code>, <code>episodes</code>, with consistency test.</li>
+<li>Validate-by-default at the L2 boundary; raise on invalid (no <code>validate=</code> opt-out, no <code>on_invalid="skip"|"warn"</code> modes).</li>
+<li>Per-entity exception aborts the run (no skip-on-failure mode).</li>
+<li><code>SCALE_PRESETS</code> for two domains: <code>logistics_vehicle</code> (built from fleet defaults), <code>pedestrian</code> (calibrated on Geolife).</li>
+<li>Synthetic trace generator in <code>trajkit.testing</code>, public API from v1.</li>
+<li>Geolife integration test as the cross-domain validation gate.</li>
+<li>MkDocs site: concept guides + auto-generated API reference.</li>
+</ul>
+<h3 id="deferred-to-v11">Deferred to v1.1+<a class="headerlink" href="#deferred-to-v11" title="Permanent link">&para;</a></h3>
+<p>Each is purely additive. v1 users do not pay for these features.</p>
+<ul>
+<li><code>fit_anomaly_model</code> + persisted-model anomaly scoring.</li>
+<li><code>validate="first" | "sample" | "none"</code> opt-outs for million-entity datasets.</li>
+<li><code>on_invalid="skip" | "warn"</code> tolerant iterator modes.</li>
+<li><code>repartition_by_entity</code> helper for non-Hive parquet inputs.</li>
+<li><code>time_shard</code> helper for entities too large to fit in memory.</li>
+<li>Resilient runner (catch + continue + per-entity failure report).</li>
+<li>Polars in-memory engine (<code>[fast]</code> extra).</li>
+<li>Maritime preset + AIS-slice validation (a second cross-domain gate).</li>
+<li><code>trajkit-fleet</code> sibling package (missions, routes, destination clustering, OSM enrichment).</li>
+</ul>
+<h3 id="out-of-scope-indefinitely">Out of scope indefinitely<a class="headerlink" href="#out-of-scope-indefinitely" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Streaming sub-entity computation.</li>
+<li>Distributed multi-node.</li>
+<li>Hosted UI / SaaS.</li>
+<li>ML training framework.</li>
+</ul>
+<h3 id="gotchas_3">Gotchas<a class="headerlink" href="#gotchas_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>"v1.1" stays vague until v1 ships.</strong> Ordering by demand from real first users is the only sensible prioritization. No dates promised.</li>
+<li><strong>Geolife is the publication gate.</strong> Without Geolife passing, v1 doesn't ship. AIS in v1.1 reinforces the cross-domain claim but is not gating.</li>
+<li><strong>No silent feature drift.</strong> Every item on the deferred list stays deferred until a real user asks for it. Engineering-justified-in-isolation is not a sufficient reason to add scope back.</li>
+</ul>
+<h2 id="18-decision-register-open">18. Decision register (open)<a class="headerlink" href="#18-decision-register-open" title="Permanent link">&para;</a></h2>
+<p>Tracks unresolved decisions. When resolved, decisions move out of this section into the relevant section above.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Owner</th>
+<th>Blocker for</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>Final library name</td>
+<td>user</td>
+<td>PyPI registration</td>
+<td>open</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Repo location (new GitHub org? personal?)</td>
+<td>user</td>
+<td>Phase 0 scaffold</td>
+<td>open</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>License — MIT vs Apache-2.0</td>
+<td>user, after fleet-operator contract review</td>
+<td>first public release</td>
+<td>open</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>Validation datasets — Geolife alone, or + AIS slice</td>
+<td>—</td>
+<td>publication claim</td>
+<td><strong>resolved</strong>: Geolife in v1, AIS in v1.1 (§17)</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>Whether <code>compare</code> ships with FAISS bundled vs <code>[search]</code> extra</td>
+<td>based on Apple Silicon install testing</td>
+<td>first public release</td>
+<td>open</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>Whether segmentation taxonomy stays at 4 states or becomes plugin-extensible</td>
+<td>empirical — does maritime want different states?</td>
+<td>v2</td>
+<td><strong>deferred to v2</strong></td>
+</tr>
+<tr>
+<td>D7</td>
+<td>Synthetic trace generator API stability — public from v1 or <code>_internal</code></td>
+<td>—</td>
+<td>v1 release</td>
+<td><strong>resolved</strong>: public from v1 (§17)</td>
+</tr>
+<tr>
+<td>D8</td>
+<td>Whether to ship <code>trajkit-fleet</code> sibling on day 1 vs <code>examples/fleet/</code></td>
+<td>adoption signal</td>
+<td>first external user</td>
+<td><strong>resolved</strong>: deferred to v1.1+ (§17)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gotcha.</strong> Decision registers rot. Each open item gets a target resolution date, reviewed every two weeks until closed.</p>
+<h2 id="what-complete-looks-like-for-this-plan">What "complete" looks like for this plan<a class="headerlink" href="#what-complete-looks-like-for-this-plan" title="Permanent link">&para;</a></h2>
+<p>This document is <strong>the plan</strong>, not the implementation. It is complete when:</p>
+<ul>
+<li>Each section has been read and challenged by the user (you).</li>
+<li>The decision register has owners against every row.</li>
+<li>The naming check (PyPI + GitHub + Google) has been done.</li>
+<li>Per-module design docs exist for at least <code>episode</code> (✓), <code>clean</code>, <code>segment</code>, <code>embed</code>, <code>compare</code> before any code lands in the library repo.</li>
+</ul>
+<p><strong>Until those are in place, no code goes into the library repo.</strong> The most expensive mistake we can make is committing module skeletons that bake in unexamined assumptions.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

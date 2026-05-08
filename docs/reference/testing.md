@@ -1,0 +1,3 @@
+# `trajkit.testing`
+
+::: trajkit.testing
