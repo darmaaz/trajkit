@@ -5,4 +5,4 @@ See ``docs/design/LIBRARY.md`` §9 (Domain extensibility). Bundles for
 modules whose Params they bundle.
 """
 
-SCALE_PRESETS: dict = {}
+SCALE_PRESETS: dict[str, object] = {}
