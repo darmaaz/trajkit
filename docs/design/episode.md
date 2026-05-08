@@ -39,7 +39,9 @@ Plus optional `(M, D')` episode embedding matrix, row-aligned with episodes.
 
 **WHY.** Behavioral run-length grouping ("three MOVE_BRIEFs in a row") is brittle to taxonomy choice and produces episodes that don't correspond to anything a human cares about. A spatial-envelope rule is anchored to a physical fact (the entity was here vs. going somewhere) that survives any segment-type taxonomy and generalizes across domains.
 
-**HOW.** Detect stays first; transits are residuals. A stay is a maximal run of segments whose centroids stay within a radius `R` of the running anchor centroid, allowing a grace window of `T` outside the envelope before closure. Anything between two stays is a transit.
+**HOW.** Detect stays first; transits are residuals. A stay is a maximal run of segments whose **endpoints** (both `start_lat/lon` and `end_lat/lon`) stay within a radius `R` of the running anchor centroid, allowing a grace window of `T` outside the envelope before closure. Anything between two stays is a transit.
+
+**Why endpoint-aware containment, not centroid-only.** The natural intuition — "is this segment's centroid within R" — fails for spatially extended `MOVE` segments. A 3-minute walk that traverses 800m has a centroid that is one point ≤ R from itself, so it would trivially anchor a single-segment "stay" if its duration ≥ `min_stay_s`. Using endpoints rejects this: a segment whose start and end are far apart can't be inside any small envelope. For stationary segments where start ≈ end ≈ centroid, the endpoint check is equivalent to the centroid check.
 
 ## Parameters
 
@@ -61,7 +63,7 @@ Three knobs. Two physical, one minimum-duration filter.
 
 Two passes per entity trace.
 
-**Pass 1 — stays.** Greedy left-to-right scan:
+**Pass 1 — stays.** Greedy left-to-right scan, with two qualification gates: time (`stay_duration ≥ min_stay_s`) AND space (`max_observed_radius ≤ R`).
 
 ```
 i = 0
@@ -70,10 +72,17 @@ while i < n:
     last_inside = i
     time_outside = 0
     inside_centroids = [centroid(seg[i])]
+    inside_endpoints = [start(seg[i]), end(seg[i])]
     for j in i+1 .. n-1:
-        d = haversine(anchor, centroid(seg[j]))
+        if start_ts[j] - end_ts[j-1] > T:    # trace gap closes the stay
+            break
+        d = max(
+            haversine(anchor, start(seg[j])),
+            haversine(anchor, end(seg[j])),
+        )
         if d <= R:
             inside_centroids.append(centroid(seg[j]))
+            inside_endpoints += [start(seg[j]), end(seg[j])]
             anchor = mean(inside_centroids)   # running update
             last_inside = j
             time_outside = 0
@@ -81,8 +90,11 @@ while i < n:
             time_outside += seg[j].duration_s
             if time_outside >= T:
                 break                          # stay ends at last_inside
+    max_obs_radius = max(haversine(anchor, p) for p in inside_endpoints)
     stay_duration = end_ts[last_inside] - start_ts[i]
-    if stay_duration >= min_stay_s:
+    # Both gates must hold: a single spatially-extended segment whose
+    # endpoints exceed R fails the radius gate even if duration qualifies.
+    if stay_duration >= min_stay_s and max_obs_radius <= R:
         emit STAY(i .. last_inside, anchor, max_obs_radius)
         i = last_inside + 1
     else:

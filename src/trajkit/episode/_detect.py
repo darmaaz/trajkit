@@ -66,13 +66,17 @@ def detect_episodes(
     df = segments_df.sort_values("start_ts").reset_index(drop=True)
     entity_id = str(df["entity_id"].iloc[0])
 
-    centroid_lat = ((df["start_lat"] + df["end_lat"]) / 2.0).to_numpy(dtype=np.float64)
-    centroid_lon = ((df["start_lon"] + df["end_lon"]) / 2.0).to_numpy(dtype=np.float64)
+    start_lat = df["start_lat"].to_numpy(dtype=np.float64)
+    start_lon = df["start_lon"].to_numpy(dtype=np.float64)
+    end_lat = df["end_lat"].to_numpy(dtype=np.float64)
+    end_lon = df["end_lon"].to_numpy(dtype=np.float64)
     durations = df["duration_s"].to_numpy(dtype=np.float64)
     start_ts = df["start_ts"].to_numpy()
     end_ts = df["end_ts"].to_numpy()
 
-    stays = _find_stays(centroid_lat, centroid_lon, durations, start_ts, end_ts, p)
+    stays = _find_stays(
+        start_lat, start_lon, end_lat, end_lon, durations, start_ts, end_ts, p
+    )
     transits = _find_transits(start_ts, end_ts, stays, len(df), p)
 
     return _build_episodes_frame(df, stays, transits, entity_id, p.h3_resolution)
@@ -82,26 +86,35 @@ def detect_episodes(
 
 
 def _find_stays(
-    cent_lat: np.ndarray,
-    cent_lon: np.ndarray,
+    start_lat: np.ndarray,
+    start_lon: np.ndarray,
+    end_lat: np.ndarray,
+    end_lon: np.ndarray,
     durations: np.ndarray,
     start_ts: np.ndarray,
     end_ts: np.ndarray,
     p: EpisodeParams,
 ) -> list[_StayRecord]:
     """Greedy left-to-right scan for STAY episodes."""
-    n = len(cent_lat)
+    n = len(start_lat)
     stays: list[_StayRecord] = []
     i = 0
     while i < n:
         first_idx, last_idx, anchor_lat, anchor_lon, max_radius = _grow_stay(
-            i, cent_lat, cent_lon, durations, start_ts, end_ts, p
+            i, start_lat, start_lon, end_lat, end_lon, durations, start_ts, end_ts, p
         )
         stay_duration_s = float(
             (end_ts[last_idx] - start_ts[first_idx]) / np.timedelta64(1, "s")
         )
 
-        if stay_duration_s >= p.min_stay_s:
+        # Two qualification gates:
+        # 1. Stay duration ≥ min_stay_s (the time-based threshold).
+        # 2. Max observed radius ≤ R_m (the space-based threshold). This
+        #    catches the degenerate case where a single spatially-extended
+        #    MOVE segment becomes its own stay anchor — the segment's own
+        #    endpoints exceed R of its centroid, so its envelope_radius_m
+        #    > R, even though the centroid-only check would have passed.
+        if stay_duration_s >= p.min_stay_s and max_radius <= p.R_m:
             stays.append(
                 _StayRecord(
                     type="STAY",
@@ -121,22 +134,38 @@ def _find_stays(
 
 def _grow_stay(
     i: int,
-    cent_lat: np.ndarray,
-    cent_lon: np.ndarray,
+    start_lat: np.ndarray,
+    start_lon: np.ndarray,
+    end_lat: np.ndarray,
+    end_lon: np.ndarray,
     durations: np.ndarray,
     start_ts: np.ndarray,
     end_ts: np.ndarray,
     p: EpisodeParams,
 ) -> tuple[int, int, float, float, float]:
-    """Try to grow a stay starting at index ``i``; return stay extent + anchor."""
-    n = len(cent_lat)
-    anchor_lat = float(cent_lat[i])
-    anchor_lon = float(cent_lon[i])
+    """Try to grow a stay starting at index ``i``; return stay extent + anchor.
+
+    A segment is "inside" the envelope iff BOTH endpoints (start, end) are
+    within ``R`` of the running anchor. This rejects spatially extended
+    MOVE segments whose midpoint happens to fall near anchor while the
+    segment itself spans far beyond R — a real bug-class the centroid-only
+    check doesn't catch (a 3-minute 800m walk would otherwise qualify as
+    a stay because its midpoint is one point ≤ R from itself).
+    """
+    n = len(start_lat)
+    cent_lat_i = float((start_lat[i] + end_lat[i]) / 2.0)
+    cent_lon_i = float((start_lon[i] + end_lon[i]) / 2.0)
+    anchor_lat = cent_lat_i
+    anchor_lon = cent_lon_i
     last_inside = i
     time_outside = 0.0
 
-    inside_lat = [float(cent_lat[i])]
-    inside_lon = [float(cent_lon[i])]
+    # Running mean of inside segments' centroids — the anchor.
+    inside_cent_lat = [cent_lat_i]
+    inside_cent_lon = [cent_lon_i]
+    # All inside-segment endpoints — for honest envelope_radius_m reporting.
+    inside_endpoint_lat = [float(start_lat[i]), float(end_lat[i])]
+    inside_endpoint_lon = [float(start_lon[i]), float(end_lon[i])]
 
     for j in range(i + 1, n):
         # Inter-segment gap also closes the stay (gotcha #5).
@@ -144,12 +173,21 @@ def _grow_stay(
         if gap_s > p.T_s:
             break
 
-        d = _haversine(anchor_lat, anchor_lon, float(cent_lat[j]), float(cent_lon[j]))
-        if d <= p.R_m:
-            inside_lat.append(float(cent_lat[j]))
-            inside_lon.append(float(cent_lon[j]))
-            anchor_lat = float(np.mean(inside_lat))
-            anchor_lon = float(np.mean(inside_lon))
+        d_start = _haversine(
+            anchor_lat, anchor_lon, float(start_lat[j]), float(start_lon[j])
+        )
+        d_end = _haversine(
+            anchor_lat, anchor_lon, float(end_lat[j]), float(end_lon[j])
+        )
+        if max(d_start, d_end) <= p.R_m:
+            cent_lat_j = float((start_lat[j] + end_lat[j]) / 2.0)
+            cent_lon_j = float((start_lon[j] + end_lon[j]) / 2.0)
+            inside_cent_lat.append(cent_lat_j)
+            inside_cent_lon.append(cent_lon_j)
+            inside_endpoint_lat.extend([float(start_lat[j]), float(end_lat[j])])
+            inside_endpoint_lon.extend([float(start_lon[j]), float(end_lon[j])])
+            anchor_lat = float(np.mean(inside_cent_lat))
+            anchor_lon = float(np.mean(inside_cent_lon))
             last_inside = j
             time_outside = 0.0
         else:
@@ -157,12 +195,14 @@ def _grow_stay(
             if time_outside >= p.T_s:
                 break
 
-    # Recompute max observed radius against the FINAL anchor — running mean
-    # drifted while inside-points were added, so per-step radii are stale.
-    inside_arr_lat = np.asarray(inside_lat, dtype=np.float64)
-    inside_arr_lon = np.asarray(inside_lon, dtype=np.float64)
+    # Recompute max observed radius against the FINAL anchor across all
+    # inside-segment endpoints — running mean drifted while accumulating, so
+    # per-step radii are stale.
     radii = _haversine_array(
-        anchor_lat, anchor_lon, inside_arr_lat, inside_arr_lon
+        anchor_lat,
+        anchor_lon,
+        np.asarray(inside_endpoint_lat, dtype=np.float64),
+        np.asarray(inside_endpoint_lon, dtype=np.float64),
     )
     max_radius = float(radii.max()) if len(radii) > 0 else 0.0
 
