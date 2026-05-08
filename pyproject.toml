@@ -69,6 +69,12 @@ addopts = "--strict-markers --strict-config"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+extend-exclude = [
+    # Jupytext notebook source + executed notebook: cell-based,
+    # intentional mid-file imports for path setup.
+    "examples/geolife/_explore_source.py",
+    "examples/geolife/explore.ipynb",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "PD", "PT"]

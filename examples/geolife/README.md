@@ -9,8 +9,42 @@ non-fleet).
 | File | Purpose |
 |---|---|
 | `reader.py` | `.plt` parser + per-user trajectory loader |
-| `run.py` | end-to-end pipeline runner with summary printouts |
+| `run.py` | end-to-end pipeline runner with summary printouts (CLI) |
+| `explore.ipynb` | **Visual validation notebook** — segment maps, STAY anchors, similarity demo |
+| `_explore_source.py` | jupytext source for `explore.ipynb` (edit here, regenerate notebook) |
+| `segments_map.html` | standalone trajectory map (color-coded by segment_type) |
+| `stays_map.html` | standalone STAY anchors map |
+| `similarity_map.html` | standalone similarity-search visualisation |
 | `README.md` | this file — download + run instructions |
+
+## Visual validation
+
+`explore.ipynb` is the recommended starting point for evaluating
+trajkit on Geolife. Open it in JupyterLab / VS Code / on GitHub and you
+get:
+
+* histograms of segment-type breakdown and STAY duration
+* an interactive Folium map of the trajectory color-coded by
+  `segment_type`
+* an interactive map of STAY anchors sized by duration
+* a similarity-search demo (query segment + top-5 nearest neighbours
+  on a map)
+
+The standalone `*.html` files contain the same maps for direct browser
+viewing without Jupyter.
+
+## Re-executing the notebook
+
+```bash
+pip install jupyter jupytext matplotlib folium
+jupytext --to ipynb examples/geolife/_explore_source.py \
+    -o examples/geolife/explore.ipynb
+jupyter nbconvert --to notebook --execute --inplace \
+    examples/geolife/explore.ipynb
+```
+
+`_explore_source.py` is the canonical edit surface — re-run the two
+commands above to refresh the `.ipynb` after edits.
 
 ## Download
 
