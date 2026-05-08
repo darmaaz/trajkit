@@ -1,0 +1,9 @@
+License: TBD
+
+This package is not yet licensed for public distribution. The author is
+reviewing the upstream contract that governs the work-derived code (see
+docs/design/LIBRARY.md §16) before selecting an open-source license.
+Candidates: MIT or Apache-2.0.
+
+Until a license is set, do not redistribute, fork publicly, or include this
+code in derivative works.

@@ -1,0 +1,104 @@
+# `trajkit.segment`
+
+## Purpose
+
+Convert a cleaned per-ping stream into typed atomic behavioral units:
+sustained movement (`MOVE`), short repositioning (`MOVE_BRIEF`), brief
+stationary periods (`STOP_BRIEF`), and qualifying dwells (`STOP_DWELL`).
+Naive speed-thresholding produces flicker; this layer's value is the
+hysteresis state machine and sustained-bearing detection that suppress it.
+The output is the input to `episode` (multi-segment grouping) and `embed`
+(vectorization).
+
+## Assumptions
+
+- Input is the output of `clean` for one entity, with `speed_ms` populated
+  and `quality_flag` set.
+- Sorted by `ts`; the state machine consumes ping order, not real-time.
+- Time gaps within the trace terminate the current segment regardless of
+  state (a gap is, by construction, not part of any segment's behavior).
+- The four-state taxonomy is fixed in v1. Plugin extensibility is deferred
+  to v2 (LIBRARY.md D6) — the maritime use case may motivate it.
+- Hysteresis thresholds are calibrated per scale class via presets; users
+  override per-call via `SegmentParams`.
+- Pings flagged `DEVICE_FAULT` or `SPEED_OUTLIER` are treated as missing
+  (excluded from speed/bearing decisions but kept in the row count).
+
+## Architecture
+
+Two pure functions; the second consumes the first's output.
+
+```python
+segment(pings_df: pd.DataFrame, params: SegmentParams) -> pd.DataFrame
+aggregate_segments(segmented_pings_df: pd.DataFrame) -> pd.DataFrame
+```
+
+`segment`:
+- Hysteresis state machine. Two thresholds (`stop_speed_kmh`,
+  `resume_speed_kmh`) define the move/stop transition with a dead zone
+  between them, preventing flicker at the boundary.
+- A sustained-bearing rule splits a `MOVE` when bearing change exceeds
+  `bearing_change_deg` for a continuous `bearing_sustain_s` window.
+- Brief-vs-dwell distinction is by duration only (`dwell_threshold_min`).
+- `MOVE_BRIEF` is recognized when a `MOVE` candidate has fewer than
+  `move_brief_min_pings` or shorter than `move_brief_max_duration_s`.
+- Output is the per-ping frame with `segment_id` and `segment_type` added.
+
+`aggregate_segments`:
+- Single `groupby(segment_id)` over the per-ping frame.
+- Computes per-segment kinematics (mean/max speed, path length, displacement,
+  straightness, bearing variance), spatial endpoints (start/end lat/lon, h3),
+  temporal endpoints (start/end ts, duration), and `n_pings`.
+- Output validates against the `Segments` schema.
+
+The state machine is implemented as a vectorized scan where possible
+(speed comparisons, bearing differences) with a single Python-level pass
+for state transitions. Sustained-bearing detection uses a sliding window
+on a circular-difference array, O(N).
+
+## Efficiency
+
+- O(N) over pings. State-transition pass is the only non-vectorized step.
+- Target: 500 K pings/sec/entity on the developer laptop.
+- Memory: one frame's worth, no copies; segment_id and segment_type are
+  appended in place.
+- `aggregate_segments` is a single groupby; circular variance over each
+  group is the heaviest per-segment computation, still O(pings_in_segment).
+- No spatial index; no cross-entity work.
+
+## Usage
+
+```python
+import trajkit
+
+per_ping_segmented = trajkit.segment(clean_df, trajkit.SegmentParams.from_preset("logistics_vehicle"))
+segments_df = trajkit.aggregate_segments(per_ping_segmented)
+
+# Inside L3 runner: stage="segment" produces only segments_df (per-ping
+# segmented frame is intermediate, not persisted).
+```
+
+## Successful deliverable
+
+- [ ] `segment(pings_df, params) -> pd.DataFrame` — emits `segment_id`,
+      `segment_type`. Properties: every ping assigned exactly one
+      `segment_id`; consecutive same-type pings share `segment_id`; gap
+      always terminates the segment; sustained-bearing split honored.
+- [ ] `aggregate_segments(per_ping_df) -> pd.DataFrame` — output validates
+      `Segments` schema. No zero-duration segments. `straightness ∈ [0, 1]`.
+- [ ] `SegmentParams` model — frozen, all thresholds explicit.
+- [ ] Synthetic-trace tests: drive-stop-drive, oscillation at the speed
+      boundary (hysteresis works), sustained turn, turn-without-sustain,
+      `MOVE_BRIEF` recognition, gap-terminated segment, single-ping segment
+      rejection.
+- [ ] Property test: applying `segment` then `aggregate_segments` and
+      summing `duration_s` recovers the trace duration ± gap totals.
+- [ ] ≥ 80% line coverage.
+
+## Not in this layer
+
+- Episode grouping — `episode`.
+- Vector embedding — `embed`.
+- Cross-entity z-score normalization — pass-2 `fit_baselines` and
+  `embed.baseline_zscores`.
+- Persistence — L3 runner concern.
