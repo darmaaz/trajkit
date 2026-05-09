@@ -30,6 +30,14 @@ def test_pedestrian_overrides_episode_params() -> None:
     assert p.episode.min_stay_s == 120.0
 
 
+def test_pedestrian_overrides_segment_params_for_walking_pace() -> None:
+    """Segment thresholds tuned for walking, not driving."""
+    p = SCALE_PRESETS["pedestrian"]
+    assert p.segment.stop_speed_kmh == 1.0
+    assert p.segment.resume_speed_kmh == 3.0
+    assert p.segment.max_stop_displacement_m == 50.0
+
+
 def test_get_preset_returns_named_bundle() -> None:
     p = get_preset("pedestrian")
     assert p.episode.R_m == 30.0
