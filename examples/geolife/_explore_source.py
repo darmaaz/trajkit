@@ -309,6 +309,190 @@ m_sim
 # day, neighbourhood — not arbitrary geographic proximity.
 
 # %% [markdown]
+# ## 9. Episode focus
+#
+# Episodes group segments into `STAY` (visit-shaped) and `TRANSIT`
+# (journey-shaped) units. For "find me visits like this customer call"
+# or "find me commutes like this morning trip" queries, episodes are the
+# right grain — segments alone would match individual highway stretches
+# rather than whole trips.
+
+# %% [markdown]
+# ### 9a. Episode-type breakdown
+
+# %%
+ep_type_counts = episodes["episode_type"].value_counts()
+ep_total_duration_h = episodes.groupby("episode_type")["duration_s"].sum() / 3600
+fig, ax = plt.subplots(1, 2, figsize=(14, 4))
+ep_type_counts.plot.bar(ax=ax[0], color=["#d62728", "#1f77b4"])
+ax[0].set_title("Episode count by type")
+ax[0].set_ylabel("Count")
+ax[0].set_xlabel("")
+ax[0].tick_params(axis="x", rotation=0)
+for i, count in enumerate(ep_type_counts):
+    ax[0].text(i, count, f" {count}", ha="center", va="bottom")
+ep_total_duration_h.plot.bar(ax=ax[1], color=["#d62728", "#1f77b4"])
+ax[1].set_title("Total duration by type (hours)")
+ax[1].set_ylabel("Hours")
+ax[1].set_xlabel("")
+ax[1].tick_params(axis="x", rotation=0)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# **Reading guide.** Counts are usually similar (every TRANSIT is
+# bracketed by STAYs) but total durations differ wildly: STAYs dominate
+# wall-clock time (sleep + work) while TRANSITs are a smaller fraction
+# of the day. If TRANSIT count is near zero, the segment thresholds are
+# too lax (slow movement classified as stops).
+
+# %% [markdown]
+# ### 9b. TRANSIT map
+#
+# Each line is one TRANSIT episode (straight-line start → end). Width
+# scales with `duration_s`; colour scales with `path_length_m`.
+
+# %%
+transits = episodes[episodes["episode_type"] == "TRANSIT"].copy()
+m_transits = folium.Map(
+    location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
+)
+
+if len(transits) > 0:
+    max_path = float(transits["path_length_m"].max())
+    for _, ep in transits.iterrows():
+        duration_min = float(ep["duration_s"]) / 60.0
+        path_m = float(ep["path_length_m"]) if pd.notna(ep["path_length_m"]) else 0.0
+        # Colour: low path → green, high path → red
+        normalized = min(path_m / max_path, 1.0) if max_path > 0 else 0.0
+        r = int(255 * normalized)
+        g = int(255 * (1 - normalized))
+        colour = f"#{r:02x}{g:02x}40"
+        weight = float(np.clip(np.log1p(duration_min) * 1.5, 1.5, 8))
+        folium.PolyLine(
+            locations=[
+                (float(ep["start_lat"]), float(ep["start_lon"])),
+                (float(ep["end_lat"]), float(ep["end_lon"])),
+            ],
+            color=colour,
+            weight=weight,
+            opacity=0.6,
+            tooltip=(
+                f"TRANSIT • {duration_min:.1f} min • path={path_m:.0f}m • "
+                f"n_segments={int(ep['n_segments'])}"
+            ),
+        ).add_to(m_transits)
+
+m_transits.save("transits_map.html")
+m_transits
+
+# %% [markdown]
+# **Reading guide.** A pedestrian's day in a city should produce many
+# short transits (red-ish, several hundred m) and a few longer ones
+# (greener, multiple km — commutes, errands across town). If everything
+# is the same colour or transits don't connect to STAY anchors, the
+# pipeline isn't producing the journey-shaped units it should.
+
+# %% [markdown]
+# ### 9c. Episode-level similarity
+#
+# This is the more useful query than segment-level similarity: "find me
+# trips like this trip." The pooled `embed_episodes` vector
+# (`3 × 32 + 5 = 101 dims`) captures kinematic shape + duration +
+# n_segments + episode-type. Cosine similarity over those vectors
+# answers "behaviorally similar episodes."
+
+# %%
+ep_vectors_df = pd.read_parquet(
+    sink / "embed_episodes" / f"entity_id={USER_ID}" / "data.parquet"
+)
+ep_vectors = np.vstack(
+    [np.asarray(v, dtype=np.float32) for v in ep_vectors_df["vector"]]
+)
+ep_ids = ep_vectors_df["id"].astype(str).tolist()
+
+# Pick a query: the median-duration TRANSIT, so the result is interpretable
+transit_episodes = episodes[episodes["episode_type"] == "TRANSIT"].sort_values(
+    "duration_s"
+)
+if len(transit_episodes) > 0:
+    query_ep_id = transit_episodes["episode_id"].iloc[len(transit_episodes) // 2]
+    query_idx = ep_ids.index(query_ep_id)
+
+    ep_index = build_index(ep_vectors, ep_ids, metric="cosine")
+    ep_hits = search(ep_index, ep_vectors[query_idx], k=6)
+    print(f"Query: {query_ep_id}")
+    hits_table = pd.DataFrame(
+        [{"rank": h.rank, "episode_id": h.id, "score": h.score} for h in ep_hits]
+    )
+    hits_table = hits_table.merge(
+        episodes[
+            [
+                "episode_id", "episode_type", "duration_s", "n_segments",
+                "path_length_m", "displacement_m",
+            ]
+        ],
+        on="episode_id",
+    )
+    print(
+        hits_table[
+            ["rank", "episode_id", "score", "episode_type", "duration_s",
+             "n_segments", "path_length_m"]
+        ].round(3).to_string(index=False)
+    )
+
+    # Map: query (black) + neighbours (blue, decreasing opacity by rank)
+    m_ep_sim = folium.Map(
+        location=[center_lat, center_lon], zoom_start=11, tiles="cartodbpositron"
+    )
+    for _, row in hits_table.iterrows():
+        ep_row = episodes.loc[episodes["episode_id"] == row["episode_id"]].iloc[0]
+        is_query = row["rank"] == 0
+        if ep_row["episode_type"] == "STAY":
+            # STAY hits: a circle marker at the anchor
+            folium.CircleMarker(
+                location=[float(ep_row["anchor_lat"]), float(ep_row["anchor_lon"])],
+                radius=10 if is_query else 6,
+                color="#000000" if is_query else "#1f77b4",
+                fill=True,
+                fill_opacity=0.7 if is_query else 0.5,
+                tooltip=(
+                    f"rank={row['rank']} score={row['score']:.4f} STAY "
+                    f"({float(ep_row['duration_s']) / 60:.0f} min)"
+                ),
+            ).add_to(m_ep_sim)
+        else:
+            colour = "#000000" if is_query else "#1f77b4"
+            opacity = 0.9 if is_query else max(0.3, 0.8 - row["rank"] * 0.1)
+            folium.PolyLine(
+                locations=[
+                    (float(ep_row["start_lat"]), float(ep_row["start_lon"])),
+                    (float(ep_row["end_lat"]), float(ep_row["end_lon"])),
+                ],
+                color=colour,
+                weight=6 if is_query else 3,
+                opacity=opacity,
+                tooltip=(
+                    f"rank={row['rank']} score={row['score']:.4f} "
+                    f"TRANSIT ({float(ep_row['duration_s']) / 60:.0f} min, "
+                    f"{float(ep_row['path_length_m']):.0f}m)"
+                ),
+            ).add_to(m_ep_sim)
+    m_ep_sim.save("episode_similarity_map.html")
+else:
+    print("No TRANSIT episodes — episode similarity demo skipped.")
+
+m_ep_sim if len(transit_episodes) > 0 else None
+
+# %% [markdown]
+# **Reading guide.** Compare the table to the segment-similarity table
+# in section 8. Episode similarity should match on *behaviour shape*:
+# transits with similar duration + path length + structure (n_segments
+# tells you how complex the journey was). If the top hits are wildly
+# different durations or one is a STAY when the query is a TRANSIT,
+# the pooled embedding isn't capturing what we'd want.
+
+# %% [markdown]
 # ## What we learned
 #
 # This is the human-validation step. Things to check:
