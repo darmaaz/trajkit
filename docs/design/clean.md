@@ -35,7 +35,19 @@ merge_stale_positions(pings_df: pd.DataFrame, params: StaleMergeParams) -> pd.Da
 3. Derive `speed_ms`, `bearing_deg` if absent.
 4. Set `is_duplicate` for identical-coord consecutive pings.
 5. Assign `quality_flag` from a fixed precedence:
-   `DEVICE_FAULT > SPEED_OUTLIER > DRIFT > GAP_FOLLOWS > VALID`.
+   `DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID`.
+
+   Rationale for `GAP_FOLLOWS > DRIFT`: a ping with `dt_seconds` larger
+   than `gap_threshold_min` has unreliable derived kinematics — the
+   `displacement_m` spans an unobserved interval, the apparent
+   `speed_ms` is "displacement / a long time" rather than physically
+   meaningful. Drift heuristics ("tiny movement at near-zero speed")
+   only apply when inter-ping spacing is normal. Without this ordering,
+   a multi-hour gap with small implied displacement gets stamped DRIFT,
+   the segmenter sees no gap boundary, and segments grow across the
+   unobserved interval — concretely surfaced on real Geolife data
+   where a 70-min offline period appeared as a single 4310-s "MOVE"
+   segment.
 
 `merge_stale_positions`:
 1. Detect runs of consecutive identical (lat, lon).

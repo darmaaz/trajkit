@@ -191,6 +191,21 @@ def test_clean_does_not_flag_gap_below_threshold() -> None:
     assert (out["quality_flag"] != "GAP_FOLLOWS").all()
 
 
+def test_clean_long_gap_with_tiny_displacement_flagged_as_gap_not_drift() -> None:
+    """A 70-min gap with ~28 m apparent displacement must be GAP_FOLLOWS, not DRIFT.
+
+    Regression: with the original ``DRIFT > GAP_FOLLOWS`` precedence,
+    long gaps with small inter-ping displacement got silently stamped
+    DRIFT (because displacement < drift_radius_m and the implied
+    speed = displacement/dt is tiny). The segmenter then saw no gap
+    boundary and grew segments across the unobserved interval.
+    """
+    df = _make_pings(2, lat_path=np.array([19.40, 19.40025]))  # ~28 m apart
+    df.loc[1, "ts"] = df.loc[0, "ts"] + pd.Timedelta(minutes=70)
+    out = clean(df)
+    assert out.loc[1, "quality_flag"] == "GAP_FOLLOWS"
+
+
 # ── DEVICE_FAULT ────────────────────────────────────────────────────
 
 

@@ -63,12 +63,22 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
 
     # Apply flags in precedence order: a higher flag claims the row first
     # and lower stages skip it via the ``quality_flag == "VALID"`` guard.
+    #
+    # Order: DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID.
+    #
+    # GAP_FOLLOWS outranks DRIFT because gap-spanning pings have unreliable
+    # ``displacement_m`` and ``speed_ms`` — those are computed from a single
+    # observation across an unobserved interval, so any "drift-shaped"
+    # measurement during a gap is meaningless. Without this ordering, a
+    # multi-hour gap with small inter-ping displacement gets stamped DRIFT,
+    # the segmenter sees no gap boundary, and segments grow across the
+    # missing interval.
     _flag_device_faults(df, reported_speed_ms, p)
     _flag_speed_outliers(df, p)
     _null_outlier_edges(df)
-    _flag_drift(df, p)
     _flag_gaps(df, p)
     _null_gap_edges(df)
+    _flag_drift(df, p)
 
     df["is_duplicate"] = _detect_duplicates(df)
 
