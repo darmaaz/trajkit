@@ -177,53 +177,178 @@ def _state_change_boundaries(is_stop: np.ndarray) -> np.ndarray:
 def _bearing_boundaries(
     df: pd.DataFrame, is_stop: np.ndarray, p: SegmentParams
 ) -> np.ndarray:
-    """True where a sustained bearing change should split a MOVE.
+    """True where a direction change should split a MOVE.
 
-    The detector is time-based on both axes so it stays consistent across
-    ping rates and across merged-row data:
+    Detector: mean resultant length ``R`` of bearings inside a *distance-
+    based* sliding window centred on each ping. Low R = bearings spread
+    around the unit circle = direction is changing. High R = bearings
+    cluster = direction is stable. Multi-scale (short + long windows)
+    catches both street-corner turns and arterial / sustained turns.
 
-    * Rolling mean of consecutive bearing deltas over a
-      ``bearing_window_min``-minute window.
-    * Sustainment: the rolling-mean must exceed the threshold continuously
-      for at least ``bearing_sustain_s`` seconds (``min_periods=2`` so a
-      single ping can't fire a boundary).
+    Why circular statistics. Bearing is angular: averaging linear deltas
+    confounds "single sharp turn" (one big delta diluted by many zeros)
+    with "noise around a stable direction" (deltas oscillating around
+    zero). R correctly distinguishes them — the unit-circle vector mean
+    has length 1 for tight clusters and < 1 for spread.
 
-    Bearings flagged as NaN (typically very short displacements) are
-    skipped by the rolling mean naturally; they don't produce boundaries.
+    Why distance windows. Time-based windows are ping-rate-dependent: a
+    90° turn at 1-Hz pings dilutes to ≈ 1° per ping in a 2-min window
+    while the same turn at 1-min pings shows as ≈ 90°. A 200 m window
+    contains the same physical-behaviour magnitude regardless of ping
+    rate.
+
+    Why multi-scale. A 200 m default catches arterials but under-detects
+    street corners (~25 m of trajectory inside a 200 m window only flips
+    ~12 % of bearings, R stays ≈ 0.79 — won't cross 0.7). A 75 m short
+    window catches those corners. Boundary fires when R drops in *either*
+    window.
+
+    Why hysteresis. Two-threshold Schmitt trigger over distance:
+
+    * Enter "direction-changing" when R drops below ``bearing_r_enter``
+      (in either window) and stays there for ``bearing_sustain_m`` metres.
+    * Exit when R rises above ``bearing_r_exit`` (in both windows) and
+      stays there for ``bearing_sustain_m`` metres.
+
+    Boundary fires on entry (the rising edge of the in-direction-change
+    state). Restricted to moving pings; stopped-period bearings are
+    masked out so they don't pollute R.
+
+    Sparse-window guard: when fewer than ``bearing_window_min_pings``
+    valid moving bearings fall in the window, R is NaN and no boundary
+    is fired. Prevents degenerate R from 2-3-sample windows at low ping
+    rates from triggering spurious splits.
     """
     n = len(df)
     boundary = np.zeros(n, dtype=bool)
     moving = ~is_stop
-    if not moving.any():
+    if n < 2 or not moving.any():
         return boundary
 
-    bearing = df["bearing_deg"]
-    # Wraparound-safe consecutive delta in [-180, 180], absolute value
-    delta = ((bearing - bearing.shift(1) + 180.0) % 360.0 - 180.0).abs()
+    bearing_arr = df["bearing_deg"].to_numpy(dtype=np.float64)
+    valid = moving & ~np.isnan(bearing_arr)
 
-    delta_t = delta.copy()
-    delta_t.index = pd.DatetimeIndex(df["ts"])
-    rolling_delta = delta_t.rolling(
-        f"{p.bearing_window_min}min", min_periods=2
-    ).mean()
+    # Cumulative distance over MOTION ONLY (stops collapse to zero so a
+    # pause in a journey doesn't burn the window with no-progress pings).
+    disp = df["displacement_m"].fillna(0.0).to_numpy(dtype=np.float64)
+    disp_motion = np.where(moving, disp, 0.0)
+    cum_dist = np.cumsum(disp_motion)
 
-    exceeds = pd.Series(moving, index=df.index) & pd.Series(
-        rolling_delta.to_numpy() > p.bearing_change_deg, index=df.index
+    r_short = _circular_r_over_distance(
+        cum_dist, bearing_arr, valid,
+        p.bearing_window_short_m, p.bearing_window_min_pings,
+    )
+    r_long = _circular_r_over_distance(
+        cum_dist, bearing_arr, valid,
+        p.bearing_window_long_m, p.bearing_window_min_pings,
     )
 
-    exceeds_t = exceeds.copy()
-    exceeds_t.index = pd.DatetimeIndex(df["ts"])
-    sustained = (
-        exceeds_t.rolling(f"{int(p.bearing_sustain_s)}s", min_periods=2)
-        .min()
-        .fillna(0)
-        .astype(bool)
+    # NaN R is ambiguous evidence — neither low nor high. For entry,
+    # treat NaN as "high" (won't trigger entry); for exit, treat as "low"
+    # (won't trigger exit). Either way, sparse windows are conservative.
+    short_high = np.where(np.isnan(r_short), 1.0, r_short)
+    long_high = np.where(np.isnan(r_long), 1.0, r_long)
+    short_low = np.where(np.isnan(r_short), 0.0, r_short)
+    long_low = np.where(np.isnan(r_long), 0.0, r_long)
+
+    enter_signal = (short_high < p.bearing_r_enter) | (long_high < p.bearing_r_enter)
+    exit_signal = (short_low > p.bearing_r_exit) & (long_low > p.bearing_r_exit)
+
+    in_change = _distance_hysteresis(
+        cum_dist, enter_signal, exit_signal, p.bearing_sustain_m
     )
-    sustained_arr = sustained.to_numpy()
-    # Fire on the first ping of each sustained run
-    if n > 1:
-        boundary[1:] = sustained_arr[1:] & ~sustained_arr[:-1]
+
+    # Boundary fires on rising edge of in_change state, on a moving ping.
+    in_change_active = in_change & moving
+    boundary[1:] = in_change_active[1:] & ~in_change_active[:-1]
     return boundary
+
+
+def _circular_r_over_distance(
+    cum_dist: np.ndarray,
+    bearing: np.ndarray,
+    valid: np.ndarray,
+    window_m: float,
+    min_count: int,
+) -> np.ndarray:
+    """Mean resultant length R over a symmetric-distance window per ping.
+
+    Vectorised via cumulative sums of cos/sin/valid-count and binary
+    searches on ``cum_dist`` — O(n log n) over the trace.
+
+    Uses ``cos`` / ``sin`` of bearings directly, which side-steps the
+    angular wraparound problem entirely (no signed-delta needed; the
+    unit-circle vector mean *is* circularly correct by construction).
+    Sparse windows (fewer than ``min_count`` valid samples) get NaN.
+    """
+    n = len(cum_dist)
+    if n == 0:
+        return np.zeros(0, dtype=np.float64)
+
+    bearing_rad = np.deg2rad(bearing)
+    cos_b = np.where(valid, np.cos(bearing_rad), 0.0)
+    sin_b = np.where(valid, np.sin(bearing_rad), 0.0)
+
+    cum_cos = np.concatenate([[0.0], np.cumsum(cos_b)])
+    cum_sin = np.concatenate([[0.0], np.cumsum(sin_b)])
+    cum_valid = np.concatenate([[0], np.cumsum(valid.astype(np.int64))])
+
+    half = window_m / 2.0
+    lo = np.searchsorted(cum_dist, cum_dist - half, side="left")
+    hi = np.searchsorted(cum_dist, cum_dist + half, side="right")
+
+    n_valid = cum_valid[hi] - cum_valid[lo]
+    sum_cos = cum_cos[hi] - cum_cos[lo]
+    sum_sin = cum_sin[hi] - cum_sin[lo]
+
+    safe_n = np.where(n_valid > 0, n_valid, 1)
+    mean_cos = sum_cos / safe_n
+    mean_sin = sum_sin / safe_n
+    r_raw = np.sqrt(mean_cos**2 + mean_sin**2)
+    out: np.ndarray = np.where(n_valid >= min_count, r_raw, np.nan)
+    return out
+
+
+def _distance_hysteresis(
+    cum_dist: np.ndarray,
+    enter_signal: np.ndarray,
+    exit_signal: np.ndarray,
+    sustain_m: float,
+) -> np.ndarray:
+    """Schmitt-trigger state machine over cumulative distance.
+
+    Enters the "low-R" state when ``enter_signal`` has been True
+    continuously for ``sustain_m`` metres; exits when ``exit_signal`` has
+    been True continuously for ``sustain_m`` metres. Pending-distance
+    counter resets whenever the relevant signal goes False, preventing
+    intermittent low-R blips from accumulating into a state flip.
+    """
+    n = len(cum_dist)
+    in_low = np.zeros(n, dtype=bool)
+    if n == 0:
+        return in_low
+    state = False
+    pending = 0.0
+    for i in range(1, n):
+        dx = max(float(cum_dist[i] - cum_dist[i - 1]), 0.0)
+        if state:
+            if exit_signal[i]:
+                pending += dx
+                if pending >= sustain_m:
+                    state = False
+                    pending = 0.0
+            else:
+                pending = 0.0
+        else:
+            if enter_signal[i]:
+                pending += dx
+                if pending >= sustain_m:
+                    state = True
+                    pending = 0.0
+            else:
+                pending = 0.0
+        in_low[i] = state
+    return in_low
 
 
 # ── Classification ──────────────────────────────────────────────────

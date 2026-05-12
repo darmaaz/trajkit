@@ -204,14 +204,13 @@ def test_segment_creates_boundary_at_motion_state_transition() -> None:
 
 
 def test_segment_splits_move_on_sustained_bearing_change() -> None:
-    """The detector fires on sustained per-sample turn rate, not single sharp turns.
+    """The circular-R detector fires on a continuously-turning trajectory.
 
-    Using lowered thresholds for tractable synthetic data: a vehicle
-    spinning ~10°/sample for 30 seconds triggers the rolling-mean detector
-    when bearing_change_deg=5°.
+    A spiral causes bearings to rotate uniformly; ``R`` over any
+    distance window covering many spiral pings is low (bearings spread
+    around the unit circle). After ``bearing_sustain_m`` of low R, the
+    boundary fires.
     """
-    # 60 pings of constant straight motion, then 60 pings spiraling at
-    # ~10°/sample (a tight turn). Sustained per-sample delta exceeds 5°.
     n_straight = 120
     n_spiral = 120
 
@@ -238,11 +237,44 @@ def test_segment_splits_move_on_sustained_bearing_change() -> None:
         ignore_index=True,
     )
     cleaned = clean(pings)
-    params = SegmentParams(
-        bearing_change_deg=5.0, bearing_window_min=0.5, bearing_sustain_s=20.0
-    )
-    out = segment(cleaned, params)
+    out = segment(cleaned)  # default bearing params suffice
     assert out["segment_id"].nunique() >= 2
+
+
+def test_segment_does_not_split_on_single_sharp_turn() -> None:
+    """A 90° corner with straight walking before/after should NOT fire bearing.
+
+    The circular-R detector requires *sustained* low R (low R for at
+    least ``bearing_sustain_m`` of trajectory). A single 1-ping turn
+    surrounded by long straight stretches keeps R high in any window.
+    Boundary should not fire on bearing alone.
+    """
+    n_pre = 200
+    n_post = 200
+    pre_lat = 19.4 + np.arange(n_pre) * 0.0001  # walking north
+    pre_lon = np.full(n_pre, -99.2)
+    # Sharp 90° turn: continue from end of pre, now walking east
+    post_lat = np.full(n_post, pre_lat[-1])
+    post_lon = pre_lon[-1] + np.arange(1, n_post + 1) * 0.0001
+    pings = pd.concat(
+        [
+            _pings(n_pre, lat_path=pre_lat, lon_path=pre_lon),
+            _pings(
+                n_post,
+                lat_path=post_lat,
+                lon_path=post_lon,
+                start="2026-01-01 00:03:20",
+            ),
+        ],
+        ignore_index=True,
+    )
+    cleaned = clean(pings)
+    out = segment(cleaned)
+    # We expect zero bearing-induced splits: the only acceptable boundaries
+    # are state-change (none here, all moving) or gap (none here). Total
+    # segments should be ≤ 2 (one for the whole motion, possibly an
+    # initial null-bearing first ping).
+    assert out["segment_id"].nunique() <= 2
 
 
 def test_segment_does_not_split_on_brief_bearing_spike() -> None:

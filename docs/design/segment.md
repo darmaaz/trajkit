@@ -37,12 +37,53 @@ aggregate_segments(segmented_pings_df: pd.DataFrame) -> pd.DataFrame
 - Hysteresis state machine. Two thresholds (`stop_speed_kmh`,
   `resume_speed_kmh`) define the move/stop transition with a dead zone
   between them, preventing flicker at the boundary.
-- A sustained-bearing rule splits a `MOVE` when bearing change exceeds
-  `bearing_change_deg` for a continuous `bearing_sustain_s` window.
+- A bearing-change rule splits a `MOVE` based on circular statistics
+  over distance-based sliding windows (see "Bearing change detection"
+  below).
 - Brief-vs-dwell distinction is by duration only (`dwell_threshold_min`).
 - `MOVE_BRIEF` is recognized when a `MOVE` candidate has fewer than
   `move_brief_min_pings` or shorter than `move_brief_max_duration_s`.
 - Output is the per-ping frame with `segment_id` and `segment_type` added.
+
+### Bearing change detection
+
+Bearing is angular. Linear statistics on bearing deltas confound a
+"single sharp turn" (one big delta diluted by many zeros) with "noise
+around a stable direction" (deltas oscillating around zero) — the
+arithmetic mean of `|delta|` is similar in both cases. The detector
+uses **mean resultant length** `R` of bearings inside a *distance-based*
+sliding window, which correctly distinguishes the two: high `R` =
+bearings cluster (going one direction); low `R` = bearings spread
+around the unit circle (direction is changing).
+
+Distance windows (rather than time windows) make the detector
+ping-rate invariant: a 200 m window contains the same physical-
+behaviour magnitude regardless of whether it was logged at 1 Hz or
+1/min.
+
+**Multi-scale**: `R` is computed at two window sizes
+(`bearing_window_short_m=75 m` for street-corner-scale turns and
+`bearing_window_long_m=200 m` for arterial / sustained turns).
+Boundary entry signal: `R` falls below `bearing_r_enter` (default
+0.7) in *either* window. Exit signal: `R` rises above `bearing_r_exit`
+(default 0.85) in *both* windows. Asymmetric thresholds form a
+Schmitt trigger that prevents flicker around `R ≈ 0.7`.
+
+**Distance-based hysteresis**: state flips only when the relevant
+signal has persisted for `bearing_sustain_m` (default 30 m) of
+trajectory distance. A boundary fires on the rising edge of the
+"direction-changing" state, restricted to moving pings.
+
+**Sparse-window guard**: when fewer than `bearing_window_min_pings`
+(default 5) valid moving bearings fall in the window, `R` is NaN and
+no boundary is fired. Prevents degenerate `R` from 2-3-sample
+windows at low ping rates from triggering spurious splits.
+
+**Cumulative distance is computed motion-only**: stops collapse to
+zero distance, so a pause inside a journey doesn't burn the window
+with no-progress pings. Stop-period bearings are also masked out of
+the `R` computation (they're GPS jitter at near-stationary points and
+would pollute the unit-circle vector mean).
 
 `aggregate_segments`:
 - Single `groupby(segment_id)` over the per-ping frame.
