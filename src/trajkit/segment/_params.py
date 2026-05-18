@@ -60,19 +60,24 @@ class SegmentParams(BaseModel):
     )
     bearing_window_min_pings: PositiveInt = Field(
         default=5,
-        description="Minimum valid moving pings inside the distance window for "
-        "R to be considered trustworthy. Sparse windows produce NaN R, which "
-        "in turn fires no boundary.",
+        description="Ceiling for the per-window minimum-valid-bearings guard. "
+        "The detector adapts this value down to a floor of 2 when the trace's "
+        "observed median per-ping displacement would make the configured value "
+        "unsatisfiable inside the window. Lets the detector compute R on sparse "
+        "vehicular-cadence data instead of NaNing the windows out everywhere.",
     )
     bearing_r_enter: float = Field(
-        default=0.7,
+        default=0.80,
         gt=0.0,
         lt=1.0,
         description="R threshold for entering the 'direction-changing' state. "
-        "R below this in EITHER window indicates a direction change.",
+        "R below this in EITHER window indicates a direction change. The math "
+        "floor of R for a clean 90° turn centred in the window is √0.5 ≈ 0.707; "
+        "0.80 sits above that floor so the detector also catches sub-90° "
+        "(arterial-bend-scale) direction changes.",
     )
     bearing_r_exit: float = Field(
-        default=0.85,
+        default=0.92,
         gt=0.0,
         lt=1.0,
         description="R threshold for exiting the 'direction-changing' state. "

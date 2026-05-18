@@ -293,6 +293,45 @@ def test_segment_does_not_split_on_brief_bearing_spike() -> None:
     assert out["segment_id"].nunique() <= 3
 
 
+def test_segment_bearing_detector_handles_sparse_vehicular_cadence() -> None:
+    """At sparse ping cadence the detector adapts ``min_pings`` instead of NaN-ing.
+
+    A vehicular trajectory sampled at 5 s with a clear 90° turn must
+    fire a bearing-driven boundary. With the old hardcoded
+    ``min_pings=5``, the 75 m short window holds ~1 ping at 50 km/h and
+    R is NaN almost everywhere, leaving the detector blind. The
+    ping-density-adaptive guard floors ``min_pings`` to 2 on sparse
+    data, restoring the detector's ability to compute R.
+    """
+    # 50 km/h ≈ 14 m/s. With 5 s pings → ~70 m per ping.
+    # Build a 90° turn: 50 pings north, then 50 pings east, at this cadence.
+    m_per_deg = 1.0 / 9e-6
+    step_deg = 70.0 / m_per_deg  # ~70 m
+    n_leg = 50
+    pre_lat = 19.4 + np.arange(n_leg) * step_deg
+    pre_lon = np.full(n_leg, -99.2)
+    post_lat = np.full(n_leg, pre_lat[-1])
+    post_lon = -99.2 + np.arange(1, n_leg + 1) * step_deg
+    pings = pd.concat(
+        [
+            _pings(n_leg, lat_path=pre_lat, lon_path=pre_lon, freq="5s"),
+            _pings(
+                n_leg,
+                lat_path=post_lat,
+                lon_path=post_lon,
+                freq="5s",
+                start="2026-01-01 00:04:10",
+            ),
+        ],
+        ignore_index=True,
+    )
+    cleaned = clean(pings)
+    out = segment(cleaned)
+    # Without the adaptive guard this would be 1 segment (R always NaN);
+    # with it, the bearing detector fires across the turn.
+    assert out["segment_id"].nunique() >= 2
+
+
 # ── False-stop override ─────────────────────────────────────────────
 
 

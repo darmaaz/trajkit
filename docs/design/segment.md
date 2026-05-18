@@ -65,19 +65,30 @@ behaviour magnitude regardless of whether it was logged at 1 Hz or
 (`bearing_window_short_m=75 m` for street-corner-scale turns and
 `bearing_window_long_m=200 m` for arterial / sustained turns).
 Boundary entry signal: `R` falls below `bearing_r_enter` (default
-0.7) in *either* window. Exit signal: `R` rises above `bearing_r_exit`
-(default 0.85) in *both* windows. Asymmetric thresholds form a
-Schmitt trigger that prevents flicker around `R ≈ 0.7`.
+0.80) in *either* window. Exit signal: `R` rises above `bearing_r_exit`
+(default 0.92) in *both* windows. Asymmetric thresholds form a
+Schmitt trigger that prevents flicker around the entry threshold.
+`bearing_r_enter = 0.80` sits above the math floor `√0.5 ≈ 0.707`
+for a clean 90° turn centred in the window, so the detector also
+fires on sub-90° (arterial-bend-scale) direction changes; the high
+`bearing_r_exit = 0.92` demands a clean straight run to release.
 
 **Distance-based hysteresis**: state flips only when the relevant
 signal has persisted for `bearing_sustain_m` (default 30 m) of
 trajectory distance. A boundary fires on the rising edge of the
 "direction-changing" state, restricted to moving pings.
 
-**Sparse-window guard**: when fewer than `bearing_window_min_pings`
-(default 5) valid moving bearings fall in the window, `R` is NaN and
-no boundary is fired. Prevents degenerate `R` from 2-3-sample
-windows at low ping rates from triggering spurious splits.
+**Sparse-window guard**: a per-window minimum-bearings count blocks
+`R` from being computed on starved windows. The configured
+`bearing_window_min_pings` (default 5) is a **ceiling**, not a fixed
+threshold; it adapts down to a floor of 2 when the trace's observed
+median per-ping displacement would otherwise make the configured
+value unsatisfiable inside the window. This lets the detector
+compute `R` on sparse vehicular-cadence data (e.g. 5 s pings at
+50 km/h, where a 75 m window contains ~1 ping) instead of NaNing
+the windows out across long stretches. The adaptive value is
+derived once per `_bearing_boundaries` call from the median of
+positive `displacement_m`.
 
 **Cumulative distance is computed motion-only**: stops collapse to
 zero distance, so a pause inside a journey doesn't burn the window

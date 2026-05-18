@@ -197,11 +197,13 @@ def _bearing_boundaries(
     contains the same physical-behaviour magnitude regardless of ping
     rate.
 
-    Why multi-scale. A 200 m default catches arterials but under-detects
-    street corners (~25 m of trajectory inside a 200 m window only flips
-    ~12 % of bearings, R stays ≈ 0.79 — won't cross 0.7). A 75 m short
-    window catches those corners. Boundary fires when R drops in *either*
-    window.
+    Why multi-scale. A 200 m window smears a sharp street-corner over a
+    long stretch — most of the window still points in the pre-turn
+    direction, so R stays high and the corner is missed. A 75 m short
+    window concentrates the turn in a larger fraction of the window and
+    pulls R below the entry threshold. Long windows catch arterial /
+    sustained turns; short windows catch street corners. Boundary fires
+    when R drops in *either* window.
 
     Why hysteresis. Two-threshold Schmitt trigger over distance:
 
@@ -214,10 +216,12 @@ def _bearing_boundaries(
     state). Restricted to moving pings; stopped-period bearings are
     masked out so they don't pollute R.
 
-    Sparse-window guard: when fewer than ``bearing_window_min_pings``
-    valid moving bearings fall in the window, R is NaN and no boundary
-    is fired. Prevents degenerate R from 2-3-sample windows at low ping
-    rates from triggering spurious splits.
+    Sparse-window guard: a per-window minimum count blocks R from being
+    computed on starved windows. The configured
+    ``bearing_window_min_pings`` is the ceiling; it adapts down to a
+    floor of 2 when the trace's observed median per-ping displacement
+    would otherwise make the configured value impossible to satisfy
+    inside ``window_m``. See ``_effective_min_pings`` for the rule.
     """
     n = len(df)
     boundary = np.zeros(n, dtype=bool)
@@ -234,6 +238,9 @@ def _bearing_boundaries(
     disp_motion = np.where(moving, disp, 0.0)
     cum_dist = np.cumsum(disp_motion)
 
+    # The configured ``bearing_window_min_pings`` is the CEILING; the
+    # per-window minimum adapts to the actual ping density inside each
+    # window. See ``_circular_r_over_distance`` for the rule.
     r_short = _circular_r_over_distance(
         cum_dist, bearing_arr, valid,
         p.bearing_window_short_m, p.bearing_window_min_pings,
@@ -279,7 +286,15 @@ def _circular_r_over_distance(
     Uses ``cos`` / ``sin`` of bearings directly, which side-steps the
     angular wraparound problem entirely (no signed-delta needed; the
     unit-circle vector mean *is* circularly correct by construction).
-    Sparse windows (fewer than ``min_count`` valid samples) get NaN.
+
+    The ``min_count`` parameter is the **ceiling** of the per-window
+    minimum-valid-bearings guard. The effective minimum per window
+    adapts to the actual ping count in the window: ``max(2, floor(
+    n_in_window / 2))``, clamped at ``min_count``. This keeps the
+    detector from going blind on sparse-cadence data (e.g. 5 s
+    vehicular pings) while preserving the high-density confidence
+    bar on dense data. A hard floor of 2 prevents R from being
+    computed on a single sample.
     """
     n = len(cum_dist)
     if n == 0:
@@ -297,6 +312,7 @@ def _circular_r_over_distance(
     lo = np.searchsorted(cum_dist, cum_dist - half, side="left")
     hi = np.searchsorted(cum_dist, cum_dist + half, side="right")
 
+    n_in_window = hi - lo
     n_valid = cum_valid[hi] - cum_valid[lo]
     sum_cos = cum_cos[hi] - cum_cos[lo]
     sum_sin = cum_sin[hi] - cum_sin[lo]
@@ -305,7 +321,9 @@ def _circular_r_over_distance(
     mean_cos = sum_cos / safe_n
     mean_sin = sum_sin / safe_n
     r_raw = np.sqrt(mean_cos**2 + mean_sin**2)
-    out: np.ndarray = np.where(n_valid >= min_count, r_raw, np.nan)
+
+    adaptive_min = np.clip(n_in_window // 2, 2, min_count)
+    out: np.ndarray = np.where(n_valid >= adaptive_min, r_raw, np.nan)
     return out
 
 

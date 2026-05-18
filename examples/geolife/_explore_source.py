@@ -6,6 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -216,10 +217,13 @@ plt.show()
 # %% [markdown]
 # ## 6. Map: segments along the actual ping path
 #
-# Each polyline traces the **actual GPS pings** of one segment. Colour
-# encodes `segment_type`. Hover for type + duration + ping count. Note
-# that segments respect the natural shape of the trajectory — they're
-# *runs of consecutive pings*, not synthetic straight lines.
+# Two views of the same segmentation. The first map traces the **actual
+# GPS pings** of each segment — segments respect the natural shape of the
+# trajectory because they are runs of consecutive pings. The second map
+# collapses each segment to a single **start → end straight line**, the
+# representation downstream consumers (embeddings, similarity search) work
+# from. Comparing the two shows how much detail the segment abstraction
+# discards, and where that abstraction is faithful vs lossy.
 
 # %%
 COLOUR = {
@@ -229,13 +233,25 @@ COLOUR = {
     "STOP_DWELL": "#d62728",
 }
 
+legend_html = """
+<div style='position: fixed; top:10px; right:10px; z-index:9999;
+            background:white; padding:8px; border:1px solid #888; font-size:13px;'>
+  <b>Segment type</b><br>
+  <span style='color:#1f77b4'>━━━</span> MOVE<br>
+  <span style='color:#ff7f0e'>━━━</span> MOVE_BRIEF<br>
+  <span style='color:#ffbb78'>━━━</span> STOP_BRIEF<br>
+  <span style='color:#d62728'>━━━</span> STOP_DWELL<br>
+</div>
+"""
+
 center_lat = float(pings["lat"].median())
 center_lon = float(pings["lon"].median())
+
+# ── Map 6a: full ping path per segment ──────────────────────────────
 m_segments = folium.Map(
     location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
 )
 
-# Group pings by segment_id, draw each group as a polyline through its pings.
 seg_meta = segments.set_index("segment_id")[["segment_type", "duration_s"]]
 for seg_id, group in per_ping_segmented.groupby("segment_id", sort=False):
     if len(group) < 2:
@@ -256,19 +272,44 @@ for seg_id, group in per_ping_segmented.groupby("segment_id", sort=False):
         ),
     ).add_to(m_segments)
 
-legend_html = """
-<div style='position: fixed; top:10px; right:10px; z-index:9999;
-            background:white; padding:8px; border:1px solid #888; font-size:13px;'>
-  <b>Segment type</b><br>
-  <span style='color:#1f77b4'>━━━</span> MOVE<br>
-  <span style='color:#ff7f0e'>━━━</span> MOVE_BRIEF<br>
-  <span style='color:#ffbb78'>━━━</span> STOP_BRIEF<br>
-  <span style='color:#d62728'>━━━</span> STOP_DWELL<br>
-</div>
-"""
 m_segments.get_root().html.add_child(folium.Element(legend_html))
 m_segments.save("segments_map.html")
 m_segments
+
+# %% [markdown]
+# ### Map 6b: simplified — each segment as a start → end straight line
+#
+# Same colour encoding. A straight chord between `(start_lat, start_lon)`
+# and `(end_lat, end_lon)` for every segment. Curvy MOVE segments shrink
+# to short chords (low straightness); near-stationary STOP segments
+# collapse to a point or near-point.
+
+# %%
+m_segments_simplified = folium.Map(
+    location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
+)
+for _, seg in segments.iterrows():
+    seg_type = str(seg["segment_type"])
+    folium.PolyLine(
+        locations=[
+            (float(seg["start_lat"]), float(seg["start_lon"])),
+            (float(seg["end_lat"]), float(seg["end_lon"])),
+        ],
+        color=COLOUR.get(seg_type, "#888888"),
+        weight=3 if seg_type.startswith("MOVE") else 5,
+        opacity=0.6,
+        tooltip=(
+            f"{seg['segment_id']} • {seg_type} • "
+            f"{float(seg['duration_s']):.0f}s • "
+            f"path={float(seg['path_length_m']):.0f}m • "
+            f"chord={float(seg['displacement_m']):.0f}m • "
+            f"straightness={float(seg['straightness']):.2f}"
+        ),
+    ).add_to(m_segments_simplified)
+
+m_segments_simplified.get_root().html.add_child(folium.Element(legend_html))
+m_segments_simplified.save("segments_simplified_map.html")
+m_segments_simplified
 
 # %% [markdown]
 # ## 7. Anatomy of one segment
@@ -347,6 +388,133 @@ m_one_seg
 # in our schema — it's how curvy the trajectory is. A straight commute
 # down a single road has straightness ≈ 1.0; a winding park walk is
 # closer to 0.3.
+
+# %% [markdown]
+# ## 7b. A second anatomy: a clean bearing-driven boundary
+#
+# Pick `000_seg_00876` — a ~24 km vehicular MOVE that begins where the
+# circular-R detector decided the entity changed heading. The previous
+# segment (`000_seg_00875`) is also MOVE, with no stop or gap in
+# between — so the only thing that could have split them is the
+# bearing detector. Two views:
+#
+# 1. The segment on a real map alongside the tail of the preceding
+#    segment so the transition is visible.
+# 2. The circular-R curves (short and long windows) over the same
+#    distance range. Both windows plunge below the entry threshold at
+#    the boundary; that drop is exactly why the split fired.
+
+# %%
+from trajkit.segment._segment import _circular_r_over_distance  # noqa: E402
+
+TARGET_SEG = "000_seg_00876"
+ctx_pings_before = 30   # last N pings of preceding segment, for R-curve context
+ctx_pings_after  = 120  # first N pings of the target segment, for R-curve context
+
+target_mask = per_ping_segmented["segment_id"] == TARGET_SEG
+if not target_mask.any():
+    raise RuntimeError(f"{TARGET_SEG} not found in per-ping frame")
+target_idx0 = int(per_ping_segmented.index[target_mask].min())
+target_idx_last = int(per_ping_segmented.index[target_mask].max())
+prev_seg_id = per_ping_segmented["segment_id"].iloc[target_idx0 - 1]
+prev_seg_type = per_ping_segmented["segment_type"].iloc[target_idx0 - 1]
+target_meta = segments.loc[segments["segment_id"] == TARGET_SEG].iloc[0]
+
+# Two scopes:
+#   map_slice — full target segment + context tail of the previous segment,
+#               so the visual extent matches what's drawn on the section 6 map.
+#   r_slice   — narrow window around the boundary, so the R curve isn't
+#               diluted by averaging over the whole segment.
+map_slice = per_ping_segmented.iloc[
+    max(0, target_idx0 - ctx_pings_before) : target_idx_last + 1
+].reset_index(drop=True)
+r_slice = per_ping_segmented.iloc[
+    max(0, target_idx0 - ctx_pings_before) : target_idx0 + ctx_pings_after
+].reset_index(drop=True)
+
+print(
+    f"Boundary: end of {prev_seg_id} ({prev_seg_type}) → "
+    f"start of {TARGET_SEG} ({target_meta['segment_type']})"
+)
+print(
+    f"  target segment: {int(target_meta['n_pings'])} pings, "
+    f"{float(target_meta['duration_s']):.0f}s, "
+    f"path={float(target_meta['path_length_m']):.0f}m"
+)
+
+# Map: the full target segment + tail of the previous segment.
+seg_center_lat = float(map_slice["lat"].astype(float).mean())
+seg_center_lon = float(map_slice["lon"].astype(float).mean())
+m_seg_bearing = folium.Map(
+    location=[seg_center_lat, seg_center_lon], zoom_start=12, tiles="cartodbpositron"
+)
+for sid, group in map_slice.groupby("segment_id", sort=False):
+    if len(group) < 2:
+        continue
+    seg_type = str(group["segment_type"].iloc[0])
+    folium.PolyLine(
+        locations=list(zip(group["lat"].astype(float), group["lon"].astype(float), strict=True)),
+        color=COLOUR.get(seg_type, "#888888"),
+        weight=4 if seg_type.startswith("MOVE") else 6,
+        opacity=0.8,
+        tooltip=f"{sid} • {seg_type} • {len(group)} pings",
+    ).add_to(m_seg_bearing)
+boundary_lat = float(map_slice.loc[map_slice["segment_id"] == TARGET_SEG, "lat"].iloc[0])
+boundary_lon = float(map_slice.loc[map_slice["segment_id"] == TARGET_SEG, "lon"].iloc[0])
+folium.CircleMarker(
+    location=[boundary_lat, boundary_lon],
+    radius=7, color="black", fill=True, fill_opacity=0.9,
+    tooltip=f"boundary: first ping of {TARGET_SEG}",
+).add_to(m_seg_bearing)
+m_seg_bearing.get_root().html.add_child(folium.Element(legend_html))
+m_seg_bearing.save("segment_bearing_anatomy.html")
+m_seg_bearing
+
+# %%
+# R curves: narrow window around the boundary only.
+moving = r_slice["segment_type"].str.startswith("MOVE").to_numpy()
+bearing_arr = r_slice["bearing_deg"].to_numpy(dtype=float)
+valid_b = moving & ~np.isnan(bearing_arr)
+disp = r_slice["displacement_m"].fillna(0.0).to_numpy(dtype=float)
+disp_motion = np.where(moving, disp, 0.0)
+cum_dist_ctx = np.cumsum(disp_motion)
+r_short = _circular_r_over_distance(
+    cum_dist_ctx, bearing_arr, valid_b,
+    params.segment.bearing_window_short_m, params.segment.bearing_window_min_pings,
+)
+r_long = _circular_r_over_distance(
+    cum_dist_ctx, bearing_arr, valid_b,
+    params.segment.bearing_window_long_m, params.segment.bearing_window_min_pings,
+)
+boundary_local = int(r_slice.index[r_slice["segment_id"] == TARGET_SEG].min())
+boundary_dist = float(cum_dist_ctx[boundary_local])
+
+fig, ax_r = plt.subplots(1, 1, figsize=(11, 4))
+ax_r.plot(cum_dist_ctx, r_short, label=f"R (short {params.segment.bearing_window_short_m:.0f} m)", color="#1f77b4")
+ax_r.plot(cum_dist_ctx, r_long, label=f"R (long {params.segment.bearing_window_long_m:.0f} m)", color="#ff7f0e")
+ax_r.axhline(params.segment.bearing_r_enter, ls="--", color="red", alpha=0.6, lw=1)
+ax_r.axhline(params.segment.bearing_r_exit, ls="--", color="green", alpha=0.6, lw=1)
+ax_r.text(cum_dist_ctx[-1], params.segment.bearing_r_enter, " r_enter", color="red", va="center", fontsize=9)
+ax_r.text(cum_dist_ctx[-1], params.segment.bearing_r_exit, " r_exit", color="green", va="center", fontsize=9)
+ax_r.axvline(boundary_dist, color="black", ls=":", alpha=0.7, label=f"boundary @ {boundary_dist:.0f} m")
+ax_r.set_xlabel("cumulative motion distance (m)")
+ax_r.set_ylabel("R (circular concentration)")
+ax_r.set_ylim(0, 1.05)
+ax_r.set_title(f"R curves around the start of {TARGET_SEG}")
+ax_r.legend(fontsize=9, loc="lower right")
+plt.tight_layout(); plt.show()
+
+# %% [markdown]
+# **Reading guide.** R drops sharply around the boundary because the
+# 200 m long window straddles the stop — the bearings on either side
+# point in different directions (pre-stop arrival heading vs post-stop
+# departure heading), and the bearing detector's vector mean
+# correctly registers them as spread out. So the bearing detector did
+# vote to fire here on its own. The state-change detector also fired
+# at the same ping because speed crossed the resume threshold. Both
+# OR into the same boundary; this is a *coincident* split. A "purely
+# bearing" boundary (MOVE → MOVE without a stop) would look the same
+# in R, just without the state-change vote.
 
 # %% [markdown]
 # ## 8. Stay duration distribution
@@ -543,7 +711,7 @@ transit_episodes = episodes[episodes["episode_type"] == "TRANSIT"].sort_values(
     "duration_s"
 )
 if len(transit_episodes) > 0:
-    query_ep_id = transit_episodes["episode_id"].iloc[len(transit_episodes) // 2]
+    query_ep_id = "ep_000_00036"
     query_idx = ep_ids.index(query_ep_id)
     ep_index = build_index(ep_vectors, ep_ids, metric="cosine")
     ep_hits = search(ep_index, ep_vectors[query_idx], k=6)
