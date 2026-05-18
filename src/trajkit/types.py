@@ -277,7 +277,7 @@ EPISODES_ARROW: pa.Schema = _with_version(
 )
 
 
-# ── VectorsSchema (output of embed_segments / embed_episodes) ───────
+# ── VectorsSchema (output of embed_segments) ───────────────────────
 
 
 class VectorsSchema(pdr.DataFrameModel):

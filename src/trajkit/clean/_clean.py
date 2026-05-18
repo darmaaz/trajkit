@@ -1,8 +1,8 @@
 """Per-entity cleaning: dedup, kinematics, quality flags.
 
-Implements the ``clean`` function and its private helpers.
-Single-entity input sorted by ``ts``; trusts the contract.
-See ``docs/design/clean.md`` for the full spec.
+Single-entity input sorted by ``ts``; trusts the contract. The flag
+precedence rule (DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT) is
+the design point — see ``docs/design/clean.md`` for the rationale.
 """
 
 from __future__ import annotations
@@ -40,9 +40,9 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
     pd.DataFrame
         A new frame validated by ``CleanedPingsSchema``: original PingsSchema
         columns plus ``dt_seconds``, ``displacement_m``, ``is_duplicate``,
-        ``quality_flag``, ``merge_count``, ``run_duration_s``. ``merge_count``
-        and ``run_duration_s`` are null here; they are populated only by
-        ``merge_stale_positions``.
+        ``quality_flag``, ``merge_count``, ``run_duration_s``. The latter two
+        are null by default; downstream callers may populate them when
+        consolidating duplicate-position runs.
     """
     p = params if params is not None else CleanParams()
 
@@ -82,8 +82,8 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
 
     df["is_duplicate"] = _detect_duplicates(df)
 
-    # merge_count and run_duration_s are populated by merge_stale_positions
-    # only. Default to null so the schema's nullability holds.
+    # merge_count and run_duration_s are reserved for downstream consolidation
+    # of duplicate-position runs and stay null by default.
     df["merge_count"] = pd.array([pd.NA] * len(df), dtype="Int32")
     df["run_duration_s"] = np.full(len(df), np.nan, dtype=np.float32)
 

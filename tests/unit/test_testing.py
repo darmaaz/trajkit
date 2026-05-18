@@ -14,7 +14,6 @@ import pytest
 from trajkit import types as tt
 from trajkit.clean import clean
 from trajkit.episode import detect_episodes
-from trajkit.runner import process
 from trajkit.segment import aggregate_segments, segment
 from trajkit.testing import make_pings, make_segments
 
@@ -139,17 +138,6 @@ def test_make_segments_feeds_episode_detection() -> None:
     eps = detect_episodes(seg)
     tt.EpisodesSchema.validate(eps)
     assert (eps["episode_type"] == "STAY").any()
-
-
-# ── End-to-end through the runner ───────────────────────────────────
-
-
-def test_make_pings_runs_through_runner(tmp_path: object) -> None:
-    """Quickstart-shape sanity: synthetic pings flow through the full runner."""
-    df = make_pings(300, motion="linear")
-    rep = process(df, tmp_path)  # type: ignore[arg-type]
-    assert rep.succeeded
-    assert rep.n_completed == 1
 
 
 # ── Multi-entity composition ────────────────────────────────────────

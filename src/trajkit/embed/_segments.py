@@ -6,10 +6,9 @@ appends each plugin's contribution. Output is a contiguous float32
 array shaped ``(n_segments, total_dim)`` plus the row-aligned segment
 ID list.
 
-Per design, the base recipe applies ``log1p`` to kinematic features
-without further standardisation. Cohort-relative scaling is the
-responsibility of ``baseline_zscores``, applied as a separate stage by
-users who want it.
+The base recipe applies ``log1p`` to kinematic features without
+further standardisation. Cohort-relative scaling is a user concern,
+applied (if desired) as a separate post-processing step.
 """
 
 from __future__ import annotations

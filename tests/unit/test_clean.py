@@ -13,13 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from trajkit import types as tt
-from trajkit.clean import (
-    CleanParams,
-    StaleMergeParams,
-    clean,
-    detect_stale_pattern,
-    merge_stale_positions,
-)
+from trajkit.clean import CleanParams, clean
 
 # ── Fixture helpers ─────────────────────────────────────────────────
 
@@ -252,67 +246,6 @@ def test_clean_marks_consecutive_identical_positions_as_duplicate() -> None:
     assert out.loc[2, "is_duplicate"] == np.bool_(True)
 
 
-# ── Stale-position merge ────────────────────────────────────────────
-
-
-def _stale_pattern_pings(n: int = 30) -> pd.DataFrame:
-    """Pings at 1-second intervals; position updates every 5 seconds.
-
-    Simulates a device that pings every second but only acquires a new
-    GPS fix every 5 seconds — the canonical stale-position pattern.
-    """
-    lat_path = np.repeat(np.linspace(19.4, 19.4 + 0.001 * (n // 5), n // 5), 5)[:n]
-    return _make_pings(n, lat_path=lat_path, speed_ms=np.full(n, 10.0, dtype=np.float32))
-
-
-def test_detect_stale_pattern_identifies_stale_device() -> None:
-    df = _stale_pattern_pings(n=30)
-    assert detect_stale_pattern(df) is True
-
-
-def test_detect_stale_pattern_returns_false_for_normal_device() -> None:
-    n = 30
-    lat_path = np.linspace(19.4, 19.43, n)
-    df = _make_pings(n, lat_path=lat_path)
-    assert detect_stale_pattern(df) is False
-
-
-def test_detect_stale_pattern_returns_false_below_min_pings() -> None:
-    df = _stale_pattern_pings(n=10)
-    assert detect_stale_pattern(df) is False
-
-
-def test_merge_stale_positions_collapses_runs() -> None:
-    pings = _stale_pattern_pings(n=30)
-    cleaned = clean(pings)
-    merged = merge_stale_positions(cleaned)
-    # 30 pings, position changes every 5 → 6 runs
-    assert len(merged) == 6
-    tt.CleanedPingsSchema.validate(merged)
-
-
-def test_merge_stale_positions_populates_merge_count_and_duration() -> None:
-    pings = _stale_pattern_pings(n=30)
-    cleaned = clean(pings)
-    merged = merge_stale_positions(cleaned)
-    assert (merged["merge_count"] == 5).all()
-    assert (merged["run_duration_s"].iloc[1:] > 0).all()  # first run may be 0
-
-
-def test_merge_stale_positions_handles_empty_input() -> None:
-    cleaned = clean(_make_pings(0))
-    merged = merge_stale_positions(cleaned)
-    assert len(merged) == 0
-
-
-def test_merge_stale_positions_does_not_mutate_input() -> None:
-    pings = _stale_pattern_pings(n=30)
-    cleaned = clean(pings)
-    snapshot = cleaned.copy(deep=True)
-    _ = merge_stale_positions(cleaned)
-    pd.testing.assert_frame_equal(cleaned, snapshot)
-
-
 # ── Params plumbing ─────────────────────────────────────────────────
 
 
@@ -325,8 +258,3 @@ def test_clean_params_are_frozen() -> None:
 def test_clean_params_reject_unknown_field() -> None:
     with pytest.raises(ValidationError):
         CleanParams(max_speed_kmh=100.0, junk="oops")  # type: ignore[call-arg]
-
-
-def test_stale_merge_params_reject_invalid_ratio() -> None:
-    with pytest.raises(ValidationError):
-        StaleMergeParams(detection_ratio_threshold=0.5)

@@ -1,4 +1,4 @@
-"""Frozen parameter models for ``trajkit.clean``.
+"""Frozen parameter model for ``trajkit.clean``.
 
 User-facing thresholds are in human-friendly units (km/h, meters,
 minutes). Conversion to SI happens once at the boundary of each
@@ -46,25 +46,4 @@ class CleanParams(BaseModel):
             "Max stddev of reported speed (input ``speed_ms``, converted to km/h) "
             "for a stuck-position entity to be classified DEVICE_FAULT."
         ),
-    )
-
-
-class StaleMergeParams(BaseModel):
-    """Parameters for ``trajkit.clean.merge_stale_positions``."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    detection_ratio_threshold: float = Field(
-        default=1.5,
-        gt=1.0,
-        description=(
-            "Stale-position entities have median(position-update interval) "
-            "/ median(ping interval) above this. Must be > 1.0; ratios at or "
-            "below 1.0 are degenerate (the device cannot update position more "
-            "often than it pings)."
-        ),
-    )
-    min_pings_for_detection: PositiveInt = Field(
-        default=20,
-        description="Minimum pings before stale-detection produces a stable estimate.",
     )

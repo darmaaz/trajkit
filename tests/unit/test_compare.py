@@ -8,15 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from trajkit.compare import (
-    Hit,
-    Index,
-    anomaly_score,
-    build_index,
-    load_index,
-    save_index,
-    search,
-)
+from trajkit.compare import Hit, Index, build_index, load_index, save_index, search
 
 # ── Fixture helpers ─────────────────────────────────────────────────
 
@@ -172,56 +164,6 @@ def test_save_and_load_index_round_trip(tmp_path: Path) -> None:
 def test_load_index_raises_on_missing_path(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_index(tmp_path / "doesnt_exist")
-
-
-# ── anomaly_score ───────────────────────────────────────────────────
-
-
-def test_anomaly_score_returns_one_score_per_row() -> None:
-    vectors = _random_vectors(100, 8)
-    scores = anomaly_score(vectors, contamination=0.05)
-    assert scores.shape == (100,)
-    assert scores.dtype == np.float32
-
-
-def test_anomaly_score_handles_empty_input() -> None:
-    vectors = np.zeros((0, 8), dtype=np.float32)
-    scores = anomaly_score(vectors)
-    assert scores.shape == (0,)
-
-
-def test_anomaly_score_ranks_planted_outliers_high() -> None:
-    """Synthetic mixture: 200 normal points + 5 planted outliers."""
-    rng = np.random.default_rng(0)
-    normal = rng.standard_normal((200, 4)).astype(np.float32) * 0.5
-    outliers = (rng.standard_normal((5, 4)).astype(np.float32) * 0.1) + 100.0
-    vectors = np.vstack([normal, outliers])
-    scores = anomaly_score(vectors, contamination=0.025)
-
-    # The 5 highest-scoring rows should mostly be the planted outliers (last 5)
-    top_indices = np.argsort(-scores)[:5]
-    n_outliers_in_top = sum(1 for i in top_indices if i >= 200)
-    assert n_outliers_in_top >= 4  # allow one false positive for noise
-
-
-def test_anomaly_score_rejects_invalid_contamination() -> None:
-    vectors = _random_vectors(50, 4)
-    with pytest.raises(ValueError, match="contamination"):
-        anomaly_score(vectors, contamination=0.0)
-    with pytest.raises(ValueError, match="contamination"):
-        anomaly_score(vectors, contamination=0.6)
-
-
-def test_anomaly_score_rejects_non_2d_input() -> None:
-    with pytest.raises(ValueError, match="2-D"):
-        anomaly_score(np.zeros(10, dtype=np.float32))
-
-
-def test_anomaly_score_is_deterministic_with_default_seed() -> None:
-    vectors = _random_vectors(50, 4)
-    a = anomaly_score(vectors)
-    b = anomaly_score(vectors)
-    np.testing.assert_array_equal(a, b)
 
 
 # ── Hit dataclass ───────────────────────────────────────────────────

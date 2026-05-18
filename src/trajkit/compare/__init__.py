@@ -1,26 +1,20 @@
-"""``trajkit.compare`` — FAISS index, similarity search, persistence, anomaly.
+"""``trajkit.compare`` — FAISS-backed similarity index and search.
 
 Public API:
 
-* ``build_index(vectors, ids, metric, normalize)`` — build a FAISS-backed
-  similarity index.
+* ``build_index(vectors, ids, metric, normalize)`` — build a FAISS index.
 * ``search(index, query, k, filter_ids)`` — top-k nearest neighbours.
-* ``save_index(index, path)`` / ``load_index(path, mmap)`` — persist and
-  reload via FAISS native serialisation.
-* ``anomaly_score(vectors, contamination)`` — per-call IsolationForest.
+* ``save_index(index, path)`` / ``load_index(path, mmap)`` — persistence.
 * ``Index``, ``Hit`` — public types.
 
-FAISS itself is imported lazily so ``import trajkit.compare`` works
-without the ``[search]`` extra installed; functions raise a clear
-``ImportError`` only when actually invoked. Install via
-``pip install 'trajkit[search]'``.
+FAISS is imported lazily so ``import trajkit.compare`` works without
+FAISS installed; functions raise ``ImportError`` only when invoked.
 
-See ``docs/design/compare.md`` for the full specification.
+See ``docs/design/compare.md`` for the metric and normalisation details.
 """
 
 from __future__ import annotations
 
-from trajkit.compare._anomaly import anomaly_score
 from trajkit.compare._index import (
     Hit,
     Index,
@@ -33,7 +27,6 @@ from trajkit.compare._index import (
 __all__ = [
     "Hit",
     "Index",
-    "anomaly_score",
     "build_index",
     "load_index",
     "save_index",
