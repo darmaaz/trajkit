@@ -9,7 +9,7 @@ Date+time give us a tz-naive UTC timestamp; we localise on read.
 
 The ``read_user`` helper walks a single user's ``Trajectory/`` subdirectory,
 concatenates all ``.plt`` files for that user, and returns a
-``PingsSchema``-compatible DataFrame ready for ``trajkit.iter_entities``.
+``PingsSchema``-compatible DataFrame ready for ``trajkit.clean``.
 """
 
 from __future__ import annotations

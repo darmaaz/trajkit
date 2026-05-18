@@ -47,13 +47,24 @@ sys.path.insert(0, str(Path.cwd()))
 sys.path.insert(0, "examples/geolife")
 from reader import read_user  # noqa: E402
 
+from trajkit.clean import CleanParams, clean  # noqa: E402
 from trajkit.compare import build_index, search  # noqa: E402
-from trajkit.runner import RunParams, process  # noqa: E402
+from trajkit.embed import EmbedParams, embed_segments  # noqa: E402
+from trajkit.episode import EpisodeParams, detect_episodes  # noqa: E402
+from trajkit.segment import SegmentParams, aggregate_segments  # noqa: E402
 from trajkit.segment import segment as run_segment  # noqa: E402
 
 GEOLIFE_DATA = Path(os.path.expanduser("~/.cache/trajkit/Geolife Trajectories 1.3/Data"))
 USER_ID = "000"
 TIME_WINDOW_DAYS = 7
+
+# Pedestrian-scale calibration for Geolife.
+SEG_PARAMS = SegmentParams(
+    stop_speed_kmh=1.0, resume_speed_kmh=3.0, max_stop_displacement_m=50.0
+)
+EP_PARAMS = EpisodeParams(R_m=30.0, T_s=120.0, min_stay_s=120.0)
+EMBED_PARAMS = EmbedParams(spatial_bounds=(39.5, 40.5, 115.5, 117.5))
+CLEAN_PARAMS = CleanParams()
 
 # %% [markdown]
 # ## 1. Load Geolife user
@@ -73,45 +84,26 @@ print(f"Window: {window_start.date()} → {window_end.date()}  "
       f"({len(pings):,} pings)")
 
 # %% [markdown]
-# ## 2. Run the trajkit pipeline (pedestrian preset)
-
-# %%
-sink = Path("/tmp/trajkit_geolife_explore")
-if sink.exists():
-    import shutil
-    shutil.rmtree(sink)
-params = RunParams.from_preset("pedestrian")
-report = process(pings, sink, params, n_workers=1)
-print(f"succeeded={report.succeeded}  elapsed={report.elapsed_seconds:.1f}s")
-
-# %% [markdown]
-# ## 3. Read pipeline outputs
+# ## 2. Run the pipeline
 #
-# The runner persists per-segment aggregated frames (one row per segment),
-# not the per-ping intermediate. To draw real ping paths in this notebook
-# we re-run the per-ping segmentation locally on the cleaned frame.
+# The L1 functions compose explicitly — no orchestrator, no on-disk
+# persistence. Everything stays in memory for the rest of the notebook.
 
 # %%
-cleaned_per_ping = pd.read_parquet(
-    sink / "clean" / f"entity_id={USER_ID}" / "data.parquet"
-)
-cleaned_per_ping["entity_id"] = cleaned_per_ping["entity_id"].astype("string")
-# Also restore entity_id from the Hive path (the column is stripped on Hive write)
-if cleaned_per_ping["entity_id"].isna().any() or len(cleaned_per_ping["entity_id"].unique()) == 0:
-    cleaned_per_ping["entity_id"] = pd.Series([USER_ID] * len(cleaned_per_ping), dtype="string")
-per_ping_segmented = run_segment(cleaned_per_ping, params.segment)
+cleaned_per_ping = clean(pings, CLEAN_PARAMS)
+per_ping_segmented = run_segment(cleaned_per_ping, SEG_PARAMS)
+segments = aggregate_segments(per_ping_segmented, SEG_PARAMS)
+episodes = detect_episodes(segments, EP_PARAMS)
+seg_vectors, seg_ids = embed_segments(segments, EMBED_PARAMS)
 
-segments = pd.read_parquet(
-    sink / "segment" / f"entity_id={USER_ID}" / "data.parquet"
-)
-episodes = pd.read_parquet(
-    sink / "episode" / f"entity_id={USER_ID}" / "data.parquet"
-)
-seg_vectors_df = pd.read_parquet(
-    sink / "embed_segments" / f"entity_id={USER_ID}" / "data.parquet"
-)
-ep_vectors_df = pd.read_parquet(
-    sink / "embed_episodes" / f"entity_id={USER_ID}" / "data.parquet"
+# Pack the segment vectors into a VectorsSchema-shaped DataFrame so later
+# cells can lookup vectors by id without juggling raw arrays.
+seg_vectors_df = pd.DataFrame(
+    {
+        "id": pd.Series(seg_ids, dtype="string"),
+        "entity_id": pd.Series([USER_ID] * len(seg_ids), dtype="string"),
+        "vector": [seg_vectors[i].astype(np.float32) for i in range(len(seg_ids))],
+    }
 )
 print(f"Pings (cleaned):       {len(per_ping_segmented):>7,}")
 print(f"Segments (aggregated): {len(segments):>7,}")
@@ -480,22 +472,22 @@ disp_motion = np.where(moving, disp, 0.0)
 cum_dist_ctx = np.cumsum(disp_motion)
 r_short = _circular_r_over_distance(
     cum_dist_ctx, bearing_arr, valid_b,
-    params.segment.bearing_window_short_m, params.segment.bearing_window_min_pings,
+    SEG_PARAMS.bearing_window_short_m, SEG_PARAMS.bearing_window_min_pings,
 )
 r_long = _circular_r_over_distance(
     cum_dist_ctx, bearing_arr, valid_b,
-    params.segment.bearing_window_long_m, params.segment.bearing_window_min_pings,
+    SEG_PARAMS.bearing_window_long_m, SEG_PARAMS.bearing_window_min_pings,
 )
 boundary_local = int(r_slice.index[r_slice["segment_id"] == TARGET_SEG].min())
 boundary_dist = float(cum_dist_ctx[boundary_local])
 
 fig, ax_r = plt.subplots(1, 1, figsize=(11, 4))
-ax_r.plot(cum_dist_ctx, r_short, label=f"R (short {params.segment.bearing_window_short_m:.0f} m)", color="#1f77b4")
-ax_r.plot(cum_dist_ctx, r_long, label=f"R (long {params.segment.bearing_window_long_m:.0f} m)", color="#ff7f0e")
-ax_r.axhline(params.segment.bearing_r_enter, ls="--", color="red", alpha=0.6, lw=1)
-ax_r.axhline(params.segment.bearing_r_exit, ls="--", color="green", alpha=0.6, lw=1)
-ax_r.text(cum_dist_ctx[-1], params.segment.bearing_r_enter, " r_enter", color="red", va="center", fontsize=9)
-ax_r.text(cum_dist_ctx[-1], params.segment.bearing_r_exit, " r_exit", color="green", va="center", fontsize=9)
+ax_r.plot(cum_dist_ctx, r_short, label=f"R (short {SEG_PARAMS.bearing_window_short_m:.0f} m)", color="#1f77b4")
+ax_r.plot(cum_dist_ctx, r_long, label=f"R (long {SEG_PARAMS.bearing_window_long_m:.0f} m)", color="#ff7f0e")
+ax_r.axhline(SEG_PARAMS.bearing_r_enter, ls="--", color="red", alpha=0.6, lw=1)
+ax_r.axhline(SEG_PARAMS.bearing_r_exit, ls="--", color="green", alpha=0.6, lw=1)
+ax_r.text(cum_dist_ctx[-1], SEG_PARAMS.bearing_r_enter, " r_enter", color="red", va="center", fontsize=9)
+ax_r.text(cum_dist_ctx[-1], SEG_PARAMS.bearing_r_exit, " r_exit", color="green", va="center", fontsize=9)
 ax_r.axvline(boundary_dist, color="black", ls=":", alpha=0.7, label=f"boundary @ {boundary_dist:.0f} m")
 ax_r.set_xlabel("cumulative motion distance (m)")
 ax_r.set_ylabel("R (circular concentration)")
@@ -694,18 +686,50 @@ m_transits
 # ## 13. Episode-level similarity (with constituent segment paths)
 #
 # The headline behavioural query: *"find me trips like this trip."*
-# Pooled `embed_episodes` vectors capture kinematic shape + duration +
-# n_segments + episode-type. Cosine similarity over those vectors
-# answers behavioural-similarity, not geographic proximity.
+# `trajkit.embed.embed_segments` produces one vector per segment.
+# Composing an episode-level vector is a user-side choice; the simplest
+# pooling — concatenate `[mean, std, max-by-magnitude]` across the
+# constituent segments and append a couple of episode-level scalars —
+# captures kinematic shape + variability + the most extreme moment.
+# Cosine similarity over those vectors answers behavioural similarity,
+# not geographic proximity.
 #
 # The query is rendered in **black**, the top-5 hits in colour by
 # segment_type with decreasing opacity by rank.
 
 # %%
-ep_vectors = np.vstack(
-    [np.asarray(v, dtype=np.float32) for v in ep_vectors_df["vector"]]
-)
-ep_ids = ep_vectors_df["id"].astype(str).tolist()
+def _pool_episode(seg_vec_subset: np.ndarray, ep_row: pd.Series) -> np.ndarray:
+    """3·D + 2 episode-level scalars; L2-normalised."""
+    if len(seg_vec_subset) == 0:
+        return np.zeros(seg_vec_subset.shape[1] * 3 + 2, dtype=np.float32)
+    mean = seg_vec_subset.mean(axis=0)
+    std = seg_vec_subset.std(axis=0)
+    abs_argmax = np.abs(seg_vec_subset).argmax(axis=0)
+    cols = np.arange(seg_vec_subset.shape[1])
+    max_by_mag = seg_vec_subset[abs_argmax, cols]
+    scalars = np.array(
+        [np.log1p(max(float(ep_row["duration_s"]), 0.0)),
+         1.0 if ep_row["episode_type"] == "TRANSIT" else 0.0],
+        dtype=np.float32,
+    )
+    v = np.concatenate([mean, std, max_by_mag, scalars]).astype(np.float32)
+    norm = float(np.linalg.norm(v))
+    return v / max(norm, 1e-8)
+
+_seg_id_to_row = {sid: i for i, sid in enumerate(seg_ids)}
+_pooled_rows = []
+_pooled_ids = []
+for _, ep_row in episodes.iterrows():
+    member_rows = [
+        _seg_id_to_row[sid] for sid in ep_row["segment_ids"] if sid in _seg_id_to_row
+    ]
+    if not member_rows:
+        continue
+    _pooled_rows.append(_pool_episode(seg_vectors[member_rows], ep_row))
+    _pooled_ids.append(str(ep_row["episode_id"]))
+
+ep_vectors = np.vstack(_pooled_rows).astype(np.float32)
+ep_ids = _pooled_ids
 
 transit_episodes = episodes[episodes["episode_type"] == "TRANSIT"].sort_values(
     "duration_s"

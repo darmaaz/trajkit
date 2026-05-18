@@ -2,10 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+### Changed
+
+- Narrowed the package to the core pipeline (clean → segment → episode →
+  embed → compare). The repository is now positioned as a reference
+  implementation rather than a maintained library; see `README.md` for
+  scope.
+
+### Removed
+
+- Multi-entity orchestrator (`trajkit.runner`) and entity iterator
+  (`trajkit.io`). Composing across many entities is left to user code; the
+  pattern is shown in `docs/concepts/pipeline.md`.
+- Cohort z-score baselining (`trajkit.baselines`,
+  `trajkit.embed.baseline_zscores`). Pattern is a standard groupby; users
+  compose their own.
+- Episode-level pooling (`trajkit.embed.embed_episodes`). Per-segment
+  embedding is the headline; episode pooling is a downstream user concern.
+- `IsolationForest` anomaly helper (`trajkit.compare.anomaly_score`).
+  Three-line sklearn wrap that didn't justify a module surface.
+- Stale-position merge (`trajkit.clean.merge_stale_positions`). Domain-
+  specific to GPS devices that ping faster than they update position.
+- Domain `RunParams` presets (`trajkit.presets`). Pedestrian-shape
+  thresholds live in the integration test instead; users compose their
+  own.
 
 ## [0.1.0] - 2026-05-08
 

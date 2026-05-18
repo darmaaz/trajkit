@@ -1,3 +1,0 @@
-# `trajkit.runner`
-
-::: trajkit.runner

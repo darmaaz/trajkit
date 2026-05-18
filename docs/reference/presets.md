@@ -1,3 +1,0 @@
-# `trajkit.presets`
-
-::: trajkit.presets

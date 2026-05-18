@@ -310,32 +310,6 @@ def test_vectors_rejects_float64_vector() -> None:
         tt.VectorsSchema.validate(df)
 
 
-# ── Baselines factory ───────────────────────────────────────────────
-
-
-def test_baselines_factory_accepts_valid_frame() -> None:
-    schema = tt.make_baselines_schema(["entity_id", "segment_type"])
-    df = pd.DataFrame(
-        {
-            "entity_id": ["v1", "v1"],
-            "segment_type": ["MOVE", "STOP_DWELL"],
-            "metric": ["duration_s", "duration_s"],
-            "mean": np.array([60.0, 600.0], dtype=np.float32),
-            "std": np.array([10.0, 120.0], dtype=np.float32),
-            "n_samples": np.array([100, 50], dtype=np.int32),
-            "is_fallback": [False, False],
-        }
-    )
-    schema.validate(df)
-
-
-def test_baselines_arrow_includes_cohort_keys() -> None:
-    schema = tt.make_baselines_arrow(["road_class"])
-    assert schema.field("road_class").type == pa.string()
-    assert schema.field("metric").type == pa.string()
-    assert schema.field("mean").type == pa.float32()
-
-
 # ── Pandera ↔ Arrow consistency ─────────────────────────────────────
 
 

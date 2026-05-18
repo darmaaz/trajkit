@@ -1,27 +1,27 @@
 # Concepts
 
-trajkit turns continuous, noisy spatial-temporal traces into a queryable
-space of comparable behavioral primitives. Three operations:
+trajkit turns a continuous, noisy GPS trace into a searchable space of
+trajectory primitives. The pipeline runs in five stages:
 
-| Operation | Module | What it produces |
+| Stage | Module | What it produces |
 |---|---|---|
-| **Discretize** | `clean` → `segment` → `episode` | typed episodic units of behaviour |
-| **Embed** | `embed` | fixed-width float32 vectors per segment / per episode |
-| **Compare** | `compare` | similarity search + anomaly scoring |
+| Clean | `clean` | per-ping frame with quality flags and derived kinematics |
+| Segment | `segment` | typed motion intervals: `MOVE`, `MOVE_BRIEF`, `STOP_BRIEF`, `STOP_DWELL` |
+| Episode | `episode` | grouped `STAY` / `TRANSIT` episodes spanning multiple segments |
+| Embed | `embed` | fixed-width float32 vector per segment |
+| Compare | `compare` | FAISS index + similarity search over segment vectors |
 
-Plus a cross-cutting orchestration layer:
-
-| Layer | Module | What |
-|---|---|---|
-| Per-entity execution | `runner.process` | iterates entities → applies stages → atomic Hive parquet writes |
-| Cohort statistics | `baselines.fit_baselines` | pass-2 mean/std for cohort-aware z-scoring |
+Each stage is a small module with explicit parameters and a single-entity
+contract — the L1 functions take one entity's frame in and return one frame
+out. Composition across multiple entities is left to user code.
 
 ## Reading order
 
-* [Pipeline](pipeline.md) — end-to-end flow from raw pings through to
-  searchable vectors.
-* [Parameters](parameters.md) — how to tune for your domain, including
-  the two v0.1.0 presets and how to override.
+- **[Pipeline](pipeline.md)** — walkthrough of the stages and what they
+  produce.
+- **[Parameters](parameters.md)** — the parameter model per stage.
 
-For algorithmic detail and rationale (the *why* behind each design
-decision), see the per-module documents under `docs/design/`.
+For the *why* behind each design choice, see the per-module design notes:
+[`clean`](../design/clean.md) · [`segment`](../design/segment.md) ·
+[`episode`](../design/episode.md) · [`embed`](../design/embed.md) ·
+[`compare`](../design/compare.md).

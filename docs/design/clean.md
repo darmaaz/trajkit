@@ -4,35 +4,33 @@
 
 Take raw spatial-temporal pings and produce a quality-flagged, normalized
 stream the rest of the pipeline can trust. Real-world GPS data carries
-duplicates, drift clusters, gap-following speed outliers, and stale-position
-devices that ping repeatedly without updating coordinates. This is the only
-layer that knows about those pathologies; downstream layers assume their
-input is already clean.
+duplicates, drift clusters, gap-following speed outliers, and device
+faults that ping repeatedly without updating coordinates. This is the
+only layer that knows about those pathologies; downstream layers assume
+their input is already clean.
 
 ## Assumptions
 
-- Input matches `PingsSchema` (see `schemas.md`).
-- Single entity per call (L1 invariant). Multi-entity input raises.
+- Input matches `PingsSchema` (see [`schemas.md`](schemas.md)).
+- Single entity per call. Multi-entity input is a user error.
 - Sorted by `ts` (asserted, never silently fixed).
 - Coordinates are WGS84.
-- Thresholds are user-decided — defaults shipped via `SCALE_PRESETS` but
-  never auto-tuned from the data inside this layer.
-- Stale-position handling is opt-in: the user either calls
-  `merge_stale_positions` explicitly or asks `clean(..., merge_stale=True)`.
+- Thresholds are user-decided. Defaults are documented inline on
+  `CleanParams`; users override per call for their domain.
 
 ## Architecture
 
-Two pure functions; either may be called without the other.
+One pure function:
 
 ```python
 clean(pings_df: pd.DataFrame, params: CleanParams) -> pd.DataFrame
-merge_stale_positions(pings_df: pd.DataFrame, params: StaleMergeParams) -> pd.DataFrame
 ```
 
-`clean`:
+Steps:
+
 1. Assert single-entity, sorted-by-ts.
 2. Compute `dt_seconds`, `displacement_m` from consecutive rows.
-3. Derive `speed_ms`, `bearing_deg` if absent.
+3. Derive `speed_ms`, `bearing_deg`.
 4. Set `is_duplicate` for identical-coord consecutive pings.
 5. Assign `quality_flag` from a fixed precedence:
    `DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID`.
@@ -46,66 +44,39 @@ merge_stale_positions(pings_df: pd.DataFrame, params: StaleMergeParams) -> pd.Da
    a multi-hour gap with small implied displacement gets stamped DRIFT,
    the segmenter sees no gap boundary, and segments grow across the
    unobserved interval — concretely surfaced on real Geolife data
-   where a 70-min offline period appeared as a single 4310-s "MOVE"
+   where a 70-minute offline period appeared as a single 4310-s `MOVE`
    segment.
 
-`merge_stale_positions`:
-1. Detect runs of consecutive identical (lat, lon).
-2. Collapse each run to its first ping; record `merge_count`, `run_duration_s`.
-3. Re-derive `dt_seconds`, `displacement_m`, `speed_ms`, `bearing_deg`.
-4. Re-flag quality on the merged frame.
-
-Both functions are stateless; no learned parameters. `CleanParams` and
-`StaleMergeParams` are frozen Pydantic models.
+`CleanParams` is a frozen Pydantic v2 model with `extra='forbid'`.
 
 ## Efficiency
 
-- Linear in N pings. All operations vectorized over numpy arrays except the
-  final flag-precedence pass (vectorized via `np.select`).
-- Memory: one entity's frame plus a constant number of derived columns.
-  Copy-on-write column appends; no row-wise iteration.
-- Target: 1 M pings/sec on the dedup/derive path; 100 K pings/sec when
-  `merge_stale_positions` runs (groupby on consecutive runs is the
-  bottleneck and is unavoidable).
-- No spatial index. POI/road joins are out of scope here — they belong in
-  `embed` feature plugins.
+- Linear in N pings. All operations vectorised over numpy arrays except
+  the final flag-precedence pass (vectorised via `np.select`).
+- Memory: one entity's frame plus a constant number of derived columns;
+  no row-wise iteration.
+- No spatial index. POI / road joins are out of scope here — they
+  belong in `embed` feature plugins.
 
 ## Usage
 
 ```python
-import trajkit
+from trajkit.clean import clean, CleanParams
 
-# L1, single entity
-clean_df = trajkit.clean(pings_df, trajkit.CleanParams.from_preset("logistics_vehicle"))
-
-# Optional stale-position pass — user-decided per fleet
-if pings_df.attrs.get("provider_known_stale", False):
-    clean_df = trajkit.merge_stale_positions(clean_df, trajkit.StaleMergeParams())
-
-# Inside the L3 runner, "clean" is a stage; stale-merge is a parameter on that stage.
+clean_df = clean(pings_df, CleanParams())
 ```
 
-## Successful deliverable
+## Deliverable
 
-- [ ] `clean(pings_df, params) -> pd.DataFrame`. Output validates against the
-      `Pings (cleaned)` schema in `schemas.md`.
-- [ ] `merge_stale_positions(pings_df, params) -> pd.DataFrame`. Output adds
-      `merge_count`, `run_duration_s`; downstream behavior identical to
-      non-merged cleaned pings otherwise.
-- [ ] `CleanParams`, `StaleMergeParams` Pydantic models — frozen, `extra="forbid"`,
-      with a `.from_preset(name)` classmethod.
-- [ ] Property-based tests asserting: monotonic ts is preserved; coordinate
-      ranges preserved; quality flag never `None`; `is_duplicate=True` implies
-      `displacement_m == 0`.
-- [ ] Synthetic-fixture tests covering: pristine input, mid-trace gap,
-      drift cluster, speed outlier, duplicate run, stale-position run,
-      naive ts (raises), reversed (lon, lat) (raises at L2).
-- [ ] ≥ 80% line coverage.
+- [x] `clean(pings_df, params) -> pd.DataFrame`. Output validates against
+      the `CleanedPings` schema in `schemas.md`.
+- [x] `CleanParams` Pydantic v2 model — frozen, `extra='forbid'`.
+- [x] Synthetic-fixture tests covering: pristine input, mid-trace gap,
+      drift cluster, speed outlier, duplicate run, naive ts (raises),
+      reversed (lon, lat) (raises at schema validation).
 
 ## Not in this layer
 
-- Trajectory segmentation — `segment`.
-- POI / road / spatial enrichment — `embed` feature plugins.
-- Anomaly scoring on cleaned data — `compare`.
-- Cross-entity baselining — pass-2 (`fit_baselines`).
-- Cross-provider format normalization — `iter_entities` `column_map=` parameter.
+- Trajectory segmentation — [`segment`](segment.md).
+- POI / road / spatial enrichment — [`embed`](embed.md) feature plugins.
+- Similarity / anomaly scoring on cleaned data — [`compare`](compare.md).

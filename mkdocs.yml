@@ -1,6 +1,5 @@
 site_name: trajkit
-site_description: Behavioral primitives for spatial-temporal traces
-site_url: https://github.com/darmaaz/trajkit
+site_description: End-to-end pipeline for trajectory analysis — reference design.
 repo_url: https://github.com/darmaaz/trajkit
 repo_name: darmaaz/trajkit
 
@@ -47,7 +46,6 @@ nav:
       - Pipeline: concepts/pipeline.md
       - Parameters: concepts/parameters.md
   - Design:
-      - design/LIBRARY.md
       - design/schemas.md
       - Modules:
           - design/clean.md
@@ -55,6 +53,7 @@ nav:
           - design/episode.md
           - design/embed.md
           - design/compare.md
+      - Architecture notes: design/LIBRARY.md
   - Reference:
       - reference/index.md
       - clean: reference/clean.md
@@ -62,9 +61,5 @@ nav:
       - episode: reference/episode.md
       - embed: reference/embed.md
       - compare: reference/compare.md
-      - io: reference/io.md
-      - runner: reference/runner.md
-      - baselines: reference/baselines.md
       - testing: reference/testing.md
-      - presets: reference/presets.md
       - types: reference/types.md

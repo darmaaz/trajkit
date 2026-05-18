@@ -21,7 +21,7 @@ require a bump; readers tolerate missing-with-default for older files.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 import numpy as np
 import pandas as pd
@@ -58,10 +58,10 @@ EPISODE_TYPES = frozenset({"STAY", "TRANSIT"})
 
 
 class PingsSchema(pdr.DataFrameModel):
-    """L1 input contract — one entity per frame, sorted by ``ts``.
+    """Input contract — one entity per frame, sorted by ``ts``.
 
-    iter_entities yields frames matching this schema. L1 functions trust
-    these invariants and assert single-entity / sorted on entry.
+    Pipeline functions trust this contract and assert single-entity /
+    sorted on entry.
     """
 
     entity_id: Series[str] = pdr.Field(nullable=False)
@@ -322,58 +322,6 @@ VECTORS_ARROW: pa.Schema = _with_version(
 )
 
 
-# ── BaselinesSchema (output of pass-2 fit_baselines) ────────────────
-
-
-def make_baselines_schema(cohort_keys: list[str]) -> type[pdr.DataFrameModel]:
-    """Build a Baselines schema parameterized by cohort key columns.
-
-    cohort_keys vary per call (e.g. ``["entity_id"]``, ``["road_class",
-    "segment_type"]``), so a static schema can't enumerate them. Each
-    cohort key is added as a non-nullable string column alongside the
-    fixed core columns.
-    """
-
-    # Each entry is (annotation type, pandera Field). Pandera/Field types are
-    # opaque to mypy, so values are typed as ``tuple[Any, Any]``.
-    fields: dict[str, tuple[Any, Any]] = {
-        key: (Series[str], pdr.Field(nullable=False)) for key in cohort_keys
-    }
-    fields["metric"] = (Series[str], pdr.Field(nullable=False))
-    fields["mean"] = (Series[np.float32], pdr.Field(nullable=False))
-    fields["std"] = (Series[np.float32], pdr.Field(nullable=False, ge=0.0))
-    fields["n_samples"] = (Series[np.int32], pdr.Field(nullable=False, ge=1))
-    fields["is_fallback"] = (Series[bool], pdr.Field(nullable=False))
-
-    annotations: dict[str, Any] = {name: tp for name, (tp, _field) in fields.items()}
-    body: dict[str, Any] = {"__annotations__": annotations}
-    for name, (_tp, field) in fields.items():
-        body[name] = field
-
-    class _Config:
-        strict = True
-        coerce = False
-
-    body["Config"] = _Config
-
-    return type("BaselinesSchema", (pdr.DataFrameModel,), body)
-
-
-def make_baselines_arrow(cohort_keys: list[str]) -> pa.Schema:
-    """Arrow counterpart of ``make_baselines_schema``."""
-    fields = [pa.field(key, pa.string(), nullable=False) for key in cohort_keys]
-    fields.extend(
-        [
-            pa.field("metric", pa.string(), nullable=False),
-            pa.field("mean", pa.float32(), nullable=False),
-            pa.field("std", pa.float32(), nullable=False),
-            pa.field("n_samples", pa.int32(), nullable=False),
-            pa.field("is_fallback", pa.bool_(), nullable=False),
-        ]
-    )
-    return _with_version(pa.schema(fields))
-
-
 __all__ = [
     "ARROW_VERSION_META_KEY",
     "CLEANED_PINGS_ARROW",
@@ -392,6 +340,4 @@ __all__ = [
     "SegmentsSchema",
     "VECTORS_ARROW",
     "VectorsSchema",
-    "make_baselines_arrow",
-    "make_baselines_schema",
 ]

@@ -1,3 +1,0 @@
-# `trajkit.io`
-
-::: trajkit.io

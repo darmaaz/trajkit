@@ -96,24 +96,18 @@ spanning years).
 1. Discovers users with a `Trajectory/` subdirectory.
 2. Loads selected users — concatenates all `.plt` files per user,
    produces a `PingsSchema`-compatible frame.
-3. Runs `trajkit.runner.process` with the published pedestrian preset
-   (`R_m=30 m`, `T_s=120 s`, `min_stay_s=120 s`).
-4. Prints a per-stage summary (rows + key descriptors).
-5. Builds a FAISS similarity index over segment vectors and runs a
-   query.
-6. Computes cohort baselines + z-scores.
-7. Reports STAY anchor recurrence per user.
+3. Runs the pipeline per user (`clean → segment → episode → embed_segments`)
+   with pedestrian-tuned parameters (`R_m=30 m`, `T_s=120 s`,
+   `min_stay_s=120 s`).
+4. Concatenates segment vectors across users and builds a FAISS index.
+5. Issues a similarity query for sanity.
 
-## Why this is the cross-domain gate
+## Why pedestrian
 
-The pedestrian / multi-modal nature of Geolife (Beijing residents
-walking, biking, driving, taking taxis and trains) sits outside the
-trajkit defaults that were originally fleet-tuned. Running the same
-pipeline + the published `pedestrian` preset on real Geolife data
-either:
-
-* validates that the library generalises beyond fleet vehicles, or
-* surfaces concrete tuning issues we'd never have caught synthetically.
+Geolife is multi-modal (Beijing residents walking, biking, driving,
+taking taxis and trains), which exercises the pipeline well outside the
+vehicle-cadence defaults. The pedestrian thresholds used here are
+documented in `tests/integration/test_pedestrian_pipeline.py`.
 
 Either outcome is informative. Synthetic pedestrian fixtures (in the
 `tests/integration/` suite) prove the pipeline doesn't crash; this

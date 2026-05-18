@@ -21,7 +21,7 @@ schemas start at version `1`.
 
 ## Pings — input
 
-Output of `iter_entities`. Single-entity frames sorted by `ts`.
+Single-entity frames sorted by `ts`. The pipeline's entry point.
 
 | col | dtype | nullable | constraint | notes |
 |---|---|---|---|---|
@@ -42,8 +42,8 @@ Same as Pings, plus:
 | `displacement_m` | `float32` | yes | ≥ 0 | great-circle from previous ping |
 | `is_duplicate` | `bool` | no | | identical (lat, lon) to previous |
 | `quality_flag` | `string` | no | enum below | dominant flag for the row |
-| `merge_count` | `int32` | yes | ≥ 1 | only when stale-merge ran |
-| `run_duration_s` | `float32` | yes | ≥ 0 | only when stale-merge ran |
+| `merge_count` | `int32` | yes | ≥ 1 | reserved for downstream consolidation of duplicate-position runs |
+| `run_duration_s` | `float32` | yes | ≥ 0 | reserved as above |
 
 `quality_flag` enum: `VALID`, `DRIFT`, `SPEED_OUTLIER`, `GAP_FOLLOWS`, `DEVICE_FAULT`.
 
@@ -101,39 +101,19 @@ columns are nullable on the off-type. See `episode.md` for the closure rule.
 | `path_length_m` | `float32` | yes | TRANSIT only | sum |
 | `straightness` | `float32` | yes | TRANSIT only | displacement / path |
 
-## Vectors — output of `embed_segments` / `embed_episodes`
+## Vectors — output of `embed_segments`
 
 One row per `id`. Stored as parquet with a fixed-size list column.
 
 | col | dtype | nullable | notes |
 |---|---|---|---|
-| `id` | `string` | no | `segment_id` or `episode_id` |
-| `entity_id` | `string` | no | for partitioning |
+| `id` | `string` | no | `segment_id` |
+| `entity_id` | `string` | no | |
 | `vector` | `list<float32>` (fixed size) | no | dimension declared by `EmbedParams.expected_dim()` |
 
-## Baselines — output of `fit_baselines`
+## Constraints applied at the entry point
 
-Cohort statistics keyed by the user's `cohort_keys` (e.g., `["road_class"]`,
-`["entity_id", "segment_type"]`). One row per cohort.
-
-| col | dtype | nullable | notes |
-|---|---|---|---|
-| (cohort key columns) | string/string | no | from `cohort_keys` |
-| `metric` | `string` | no | enum: `duration_s`, `mean_speed_ms`, etc. |
-| `mean` | `float32` | no | |
-| `std` | `float32` | no | |
-| `n_samples` | `int32` | no | for sample-count fallback |
-| `is_fallback` | `bool` | no | true when cohort drew from fleet baseline |
-
-## Constraints applied at L2
-
-`iter_entities` validates each yielded frame against `PingsSchema`. Failures
-raise `SchemaError` with the offending row range and column. No silent
-coercion. No silent sort.
-
-## Constraints applied at L1 entry
-
-Each L1 function asserts:
+Each pipeline function asserts:
 - Single unique `entity_id` value (multi-entity input is a user error).
 - Sorted by `ts` (assertion, not silent fix).
 - Required input columns present per the relevant schema above.
@@ -145,8 +125,8 @@ uniqueness check. Acceptable; trust restored after.
 
 - Pyarrow extension types (e.g., custom h3 type). Strings are the round-trip-safe
   interchange representation.
-- DataFrame-engine-agnostic schema (Polars LazyFrame, DuckDB Relation). Pandas
-  is the v1 in-memory engine; Polars is v1.1+.
-- Schema migration tooling. Adding a column with a default is the only kind of
-  change v1 schemas support; renames or type-changes are breaking and require
-  a major bump.
+- DataFrame-engine-agnostic schema (Polars LazyFrame, DuckDB Relation).
+  Pandas is the only in-memory engine here.
+- Schema migration tooling. Adding a column with a default is the only
+  kind of change that's tolerated without a version bump; renames or
+  type changes are breaking.

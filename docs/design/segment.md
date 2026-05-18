@@ -149,8 +149,7 @@ segments_df = trajkit.aggregate_segments(per_ping_segmented)
 
 ## Not in this layer
 
-- Episode grouping — `episode`.
-- Vector embedding — `embed`.
-- Cross-entity z-score normalization — pass-2 `fit_baselines` and
-  `embed.baseline_zscores`.
-- Persistence — L3 runner concern.
+- Episode grouping — [`episode`](episode.md).
+- Vector embedding — [`embed`](embed.md).
+- Cross-entity z-score normalisation — user concern.
+- Persistence — user concern.
