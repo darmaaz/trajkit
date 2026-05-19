@@ -14,17 +14,24 @@
 # ---
 
 # %% [markdown]
-# # trajkit × Geolife — visual validation
+# # trajkit × Geolife
 #
-# Runs the full trajkit pipeline on one Geolife user, then visualises the
-# results so you can judge whether the segmentation, episode detection,
-# and similarity search produce sensible output on real-world GPS.
+# A walk through the end-to-end pipeline on one Geolife user. Each
+# section anchors a design decision in the code to something visible on a
+# real GPS trace.
 #
-# The notebook walks the discretization hierarchy from the bottom up:
-# **pings → segments → episodes**. Each level has a "what it is" cell,
-# an "anatomy of one example" cell, and a map view. Episode similarity at
-# the end is the headline query — "find me trips like this trip" —
-# rendered as the actual constituent segment paths, not straight lines.
+# The two headline ideas:
+#
+# 1. **Segmentation that splits on motion state and on sustained
+#    direction change.** Hysteresis avoids flicker; the multi-scale
+#    circular-R bearing detector splits long `MOVE` segments where the
+#    trajectory actually turns.
+# 2. **Similarity search over per-segment vectors.** With trips pooled
+#    from their constituent segments, "find me trips like this one"
+#    becomes a cosine query against a FAISS index — returning hits that
+#    match on behaviour shape, not geography.
+#
+# The flow is **pings → segments → episodes → similarity**.
 
 # %% [markdown]
 # ## Setup
@@ -114,41 +121,15 @@ print(f"Episodes:              {len(episodes):>7,} "
 # %% [markdown]
 # ## 4. Pings → Segments → Episodes
 #
-# trajkit's discretization is a **three-level hierarchy**. Each level
-# describes the data at a different scale, with stricter membership
-# rules than the level below.
+# A three-level hierarchy:
 #
-# **Ping** — one GPS observation. Just `(entity_id, ts, lat, lon, ...)`.
-# Raw input. No semantic interpretation.
+# * **Ping** — one GPS observation. Raw input.
+# * **Segment** — a contiguous run of pings sharing one of
+#   `MOVE`, `MOVE_BRIEF`, `STOP_BRIEF`, `STOP_DWELL`.
+# * **Episode** — a contiguous run of segments sharing one of
+#   `STAY` or `TRANSIT`, decided by the spatial-envelope rule.
 #
-# **Segment** — a contiguous run of pings classified into one
-# *behavioural type*: `MOVE`, `MOVE_BRIEF`, `STOP_BRIEF`, or
-# `STOP_DWELL`. The hysteresis state machine in `trajkit.segment`
-# decides where one segment ends and the next begins. A segment answers:
-# *"what kind of motion was happening here?"* It's the smallest typed
-# unit — one stop at a red light, one stretch of highway, one yard
-# manoeuvre.
-#
-# **Episode** — a contiguous run of segments classified into one of two
-# *operational types*: `STAY` (the entity was *here*) or `TRANSIT` (the
-# entity was *going somewhere*). The spatial-envelope rule in
-# `trajkit.episode` groups segments by location, with a grace window for
-# brief excursions. An episode answers: *"what was the entity doing?"*
-# It's the unit a human would use to talk about the day.
-#
-# **Membership rules in plain English:**
-#
-# * Each ping belongs to exactly one segment, decided by the hysteresis
-#   state machine + sustained-bearing splits.
-# * Each segment belongs to exactly one episode. Pass 1 of the episode
-#   detector greedily grows STAYs by accepting consecutive segments
-#   whose endpoints stay within radius `R_m` of the running anchor
-#   centroid; brief excursions outside the envelope (≤ `T_s` seconds of
-#   accumulated outside time) are absorbed into the stay. Pass 2: every
-#   maximal run of unclaimed segments becomes a TRANSIT, split where the
-#   inter-segment gap exceeds `T_s`.
-#
-# Let's look at one real example from this user's data.
+# One real example below.
 
 # %%
 # Show one episode's nested structure
@@ -175,13 +156,9 @@ print("│")
 print("└── (each segment in turn is a contiguous run of pings)")
 
 # %% [markdown]
-# **Reading guide.** This TRANSIT episode is a single journey, but
-# inside it there are several distinct typed segments — perhaps a
-# `MOVE`, a `STOP_BRIEF` at a traffic light, another `MOVE`. Each
-# segment is itself a run of dozens of pings. The hierarchy is what
-# makes downstream queries possible: ping-level data is too granular
-# to ask "what kind of trip is this?", segment-level is too noisy
-# (one trip = many segments), episode-level is the right grain.
+# One TRANSIT episode wraps several typed segments, each itself a run of
+# dozens of pings. Ping-level is too granular to ask "what kind of trip
+# is this?"; segment-level is too noisy; episode-level is the right grain.
 
 # %% [markdown]
 # ## 5. Segment-type breakdown
@@ -306,12 +283,10 @@ m_segments_simplified
 # %% [markdown]
 # ## 7. Anatomy of one segment
 #
-# Zoom into a single MOVE segment and look at the pings that make it up.
-# A segment is *not* a straight line from start to end — it's a
-# sequence of GPS observations sharing a common motion type. The
-# straight-line displacement (`displacement_m`) is the bird's-eye gap
-# between the first and last ping; the actual `path_length_m` is the
-# sum of inter-ping displacements along the way.
+# A segment is a sequence of pings sharing one motion type, not a
+# straight line. `displacement_m` is the bird's-eye gap;
+# `path_length_m` is the sum of inter-ping displacements; their ratio
+# gives `straightness ∈ [0, 1]`.
 
 # %%
 # Pick a MOVE segment with a representative ping count
@@ -374,27 +349,18 @@ m_one_seg.save("segment_anatomy.html")
 m_one_seg
 
 # %% [markdown]
-# **Reading guide.** The coloured polyline is the segment's actual
-# pings. The grey dashed line is what you'd see in a "straight line"
-# rendering. The ratio `path_length / displacement` is `1 / straightness`
-# in our schema — it's how curvy the trajectory is. A straight commute
-# down a single road has straightness ≈ 1.0; a winding park walk is
-# closer to 0.3.
+# The coloured polyline is the actual pings; the grey dashed line is the
+# straight-line displacement. A straight commute scores `straightness ≈
+# 1.0`; a winding walk lands closer to 0.3.
 
 # %% [markdown]
-# ## 7b. A second anatomy: a clean bearing-driven boundary
+# ## 7b. A bearing-driven boundary
 #
-# Pick `000_seg_00876` — a ~24 km vehicular MOVE that begins where the
-# circular-R detector decided the entity changed heading. The previous
-# segment (`000_seg_00875`) is also MOVE, with no stop or gap in
-# between — so the only thing that could have split them is the
-# bearing detector. Two views:
-#
-# 1. The segment on a real map alongside the tail of the preceding
-#    segment so the transition is visible.
-# 2. The circular-R curves (short and long windows) over the same
-#    distance range. Both windows plunge below the entry threshold at
-#    the boundary; that drop is exactly why the split fired.
+# A pair of consecutive `MOVE` segments with no stop or gap between them
+# can only have been split by the bearing detector. The map shows the
+# transition; the R plot below shows the circular concentration in both
+# distance windows plunging through the entry threshold at the boundary
+# — that drop is why the split fired.
 
 # %%
 from trajkit.segment._segment import _circular_r_over_distance  # noqa: E402
@@ -497,16 +463,11 @@ ax_r.legend(fontsize=9, loc="lower right")
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Reading guide.** R drops sharply around the boundary because the
-# 200 m long window straddles the stop — the bearings on either side
-# point in different directions (pre-stop arrival heading vs post-stop
-# departure heading), and the bearing detector's vector mean
-# correctly registers them as spread out. So the bearing detector did
-# vote to fire here on its own. The state-change detector also fired
-# at the same ping because speed crossed the resume threshold. Both
-# OR into the same boundary; this is a *coincident* split. A "purely
-# bearing" boundary (MOVE → MOVE without a stop) would look the same
-# in R, just without the state-change vote.
+# R drops sharply at the boundary because the windows straddle a heading
+# change: bearings on either side point in different directions, and the
+# vector-mean registers them as spread out. A purely-bearing boundary
+# (MOVE → MOVE with no stop in between) looks the same in R, just
+# without the coincident state-change vote.
 
 # %% [markdown]
 # ## 8. Stay duration distribution
@@ -569,11 +530,8 @@ plt.show()
 # %% [markdown]
 # ## 11. Anatomy of one episode
 #
-# An episode is built of segments, and each segment is built of pings.
-# Here we render one TRANSIT with its constituent segments coloured
-# individually — you can see the boundaries the segmentation chose
-# (where one MOVE ends and the next begins, where a STOP_BRIEF
-# interrupts movement) inside one continuous journey.
+# One TRANSIT with its constituent segments coloured individually —
+# the segment boundaries inside a single journey become visible.
 
 # %%
 def _episode_path_polyline(
@@ -656,20 +614,15 @@ m_one_ep.save("episode_anatomy.html")
 m_one_ep
 
 # %% [markdown]
-# **Reading guide.** Each colour change along the journey is a segment
-# boundary. Look for: stretches of blue (`MOVE`) interrupted by short
-# yellow blocks (`STOP_BRIEF` at a traffic light), or orange chunks
-# (`MOVE_BRIEF`, e.g. parking lot manoeuvring before reaching the road).
-# This is what segmentation is *for* — turning a continuous journey
-# into a sequence of typed atomic events.
+# Each colour change along the journey is a segment boundary —
+# stretches of `MOVE` interrupted by short `STOP_BRIEF` blocks (traffic
+# lights) or `MOVE_BRIEF` chunks (parking-lot manoeuvring).
 
 # %% [markdown]
 # ## 12. TRANSIT map
 #
-# All TRANSIT episodes drawn as their constituent segments' actual
-# paths. Different from the segments map in section 6 only in
-# selection: the segments shown here are exactly those bound into
-# TRANSIT episodes (i.e., the *journeys*).
+# All TRANSIT episodes drawn as their constituent segments' actual paths
+# — i.e., just the journeys.
 
 # %%
 m_transits = folium.Map(
@@ -683,19 +636,16 @@ m_transits.save("transits_map.html")
 m_transits
 
 # %% [markdown]
-# ## 13. Episode-level similarity (with constituent segment paths)
+# ## 13. Episode similarity — *"find me trips like this trip"*
 #
-# The headline behavioural query: *"find me trips like this trip."*
-# `trajkit.embed.embed_segments` produces one vector per segment.
-# Composing an episode-level vector is a user-side choice; the simplest
-# pooling — concatenate `[mean, std, max-by-magnitude]` across the
-# constituent segments and append a couple of episode-level scalars —
-# captures kinematic shape + variability + the most extreme moment.
-# Cosine similarity over those vectors answers behavioural similarity,
-# not geographic proximity.
+# `embed_segments` produces one vector per segment. Episode-level
+# pooling is a user-side choice; here we concat
+# `[mean, std, max-by-magnitude]` across an episode's segments and
+# append two episode-level scalars. Cosine similarity over the result
+# matches on behaviour shape, not geography.
 #
-# The query is rendered in **black**, the top-5 hits in colour by
-# segment_type with decreasing opacity by rank.
+# The query is rendered in **black**, the top-5 hits in colour with
+# decreasing opacity by rank.
 
 # %%
 def _pool_episode(seg_vec_subset: np.ndarray, ep_row: pd.Series) -> np.ndarray:
@@ -786,33 +736,14 @@ else:
 m_ep_sim if len(transit_episodes) > 0 else None
 
 # %% [markdown]
-# **Reading guide.** Compare the table to the segment-similarity table
-# logic from earlier exposition: episode similarity should match on
-# *behaviour shape* — transits with similar duration + path length +
-# n_segments. The map shows the actual constituent segment paths of
-# each hit; if the hits look behaviourally similar (e.g., 5-min walks
-# of similar distance) but geographically scattered, that's a good
-# sign — the embedding captured *what* not *where*.
+# Behaviourally similar hits (similar duration + path length + n_segments)
+# that are geographically scattered are the signal we want — the embedding
+# captured *what* not *where*.
 
 # %% [markdown]
-# ## What we learned
+# ## Closing
 #
-# Things to check by eye:
-#
-# 1. Section 6 segments map: do colours track physical activity?
-#    Long blue (`MOVE`) on streets, red (`STOP_DWELL`) at residential
-#    locations, orange (`MOVE_BRIEF`) clusters at building entrances?
-# 2. Section 7 single-segment: does the actual path explain why
-#    `path_length_m > displacement_m`? Is the straightness number
-#    consistent with how curvy the path looks?
-# 3. Section 9 STAY anchors: do markers cluster at obviously recurring
-#    places? In Beijing user 000's trace, expect tight clusters at home
-#    and at work / a campus location.
-# 4. Section 11 single-episode: are the segment boundaries inside the
-#    journey at sensible places (intersections, parking, transitions)?
-# 5. Section 13 episode similarity: are the top-5 hits behaviourally
-#    similar (similar duration + n_segments) even when geographically
-#    scattered?
-#
-# Each "no" is a tuning lead. Each "yes" is real validation that the
-# discretization layer is doing its job.
+# Each section above ties one design decision to its visible effect on a
+# real trace. For the full design rationale — why circular-R over rolling
+# bearing deltas, why distance-based windows, why a dual qualification
+# gate on episodes — see `docs/design/{segment,episode,embed,compare}.md`.
