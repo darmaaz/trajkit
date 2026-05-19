@@ -1,18 +1,13 @@
 """Minimal synthetic-trace builders for sanity checks.
 
-Public, but minimal. Two builders:
+Two builders:
 
 * ``make_pings(n, motion, ...)`` — single-entity ``PingsSchema`` frame.
 * ``make_segments(n, motion, ...)`` — single-entity ``SegmentsSchema`` frame.
 
-Each builder produces a schema-valid frame at canonical dtypes that
-downstream library functions can immediately accept. They are the
-fastest path to "let me see this work end-to-end" without needing
-real-world data.
-
-Designed for sanity checks and quickstart examples, not as a
-comprehensive test-data generator. The 8-scenario generator described
-in ``docs/design/LIBRARY.md`` §13 is deferred to v1.1+.
+Each produces a schema-valid frame at canonical dtypes ready for the
+pipeline. Intended for quick sanity checks and examples, not as a
+comprehensive test-data generator.
 """
 
 from __future__ import annotations

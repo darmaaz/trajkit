@@ -1,22 +1,11 @@
-"""Canonical Pandera + Arrow schemas for trajkit's public DataFrames.
+"""Pandera + Arrow schemas for the pipeline's DataFrames.
 
 Single source of truth for the data contract. See
 ``docs/design/schemas.md`` for the column-level reference.
 
-Each schema is declared twice:
-
-* As a Pandera ``DataFrameModel`` for runtime validation at the L2 iterator
-  boundary and at pass-2 read boundaries.
-* As a ``pyarrow.Schema`` for parquet I/O round-trip.
-
-A test in ``tests/unit/test_schemas.py`` asserts the two declarations agree
-on column names, dtypes, and nullability.
-
-Schema versioning: a single ``SCHEMA_VERSION`` integer applies to all v0.x
-outputs. The version is stored in each parquet's key-value metadata under
-``trajkit.schema_version``. Bumped only on breaking changes — column rename,
-dtype change, or semantic shift. Adding a column with a default does not
-require a bump; readers tolerate missing-with-default for older files.
+Each schema is declared twice — as a Pandera ``DataFrameModel`` for
+runtime validation and as a ``pyarrow.Schema`` for parquet I/O. A test
+in ``tests/unit/test_schemas.py`` asserts the two agree.
 """
 
 from __future__ import annotations
@@ -54,7 +43,7 @@ SEGMENT_TYPES = frozenset({"MOVE", "MOVE_BRIEF", "STOP_BRIEF", "STOP_DWELL"})
 EPISODE_TYPES = frozenset({"STAY", "TRANSIT"})
 
 
-# ── PingsSchema (L2 boundary input) ─────────────────────────────────
+# ── PingsSchema (pipeline input) ────────────────────────────────────
 
 
 class PingsSchema(pdr.DataFrameModel):

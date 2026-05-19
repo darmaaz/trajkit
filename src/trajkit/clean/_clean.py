@@ -31,9 +31,8 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
         recomputed from positions.
 
     params
-        Frozen ``CleanParams`` instance. Defaults are scale-class agnostic;
-        users typically override via ``CleanParams.from_preset(...)`` (added
-        in v0.1.0+).
+        Frozen ``CleanParams``. Defaults are scale-class agnostic; pass
+        a custom instance to retune.
 
     Returns
     -------
@@ -61,18 +60,8 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
 
     df["quality_flag"] = pd.Series(["VALID"] * len(df), index=df.index, dtype="string")
 
-    # Apply flags in precedence order: a higher flag claims the row first
-    # and lower stages skip it via the ``quality_flag == "VALID"`` guard.
-    #
-    # Order: DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID.
-    #
-    # GAP_FOLLOWS outranks DRIFT because gap-spanning pings have unreliable
-    # ``displacement_m`` and ``speed_ms`` — those are computed from a single
-    # observation across an unobserved interval, so any "drift-shaped"
-    # measurement during a gap is meaningless. Without this ordering, a
-    # multi-hour gap with small inter-ping displacement gets stamped DRIFT,
-    # the segmenter sees no gap boundary, and segments grow across the
-    # missing interval.
+    # Flag precedence: DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID.
+    # See docs/design/clean.md for rationale (esp. GAP_FOLLOWS > DRIFT).
     _flag_device_faults(df, reported_speed_ms, p)
     _flag_speed_outliers(df, p)
     _null_outlier_edges(df)
@@ -82,8 +71,6 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
 
     df["is_duplicate"] = _detect_duplicates(df)
 
-    # merge_count and run_duration_s are reserved for downstream consolidation
-    # of duplicate-position runs and stay null by default.
     df["merge_count"] = pd.array([pd.NA] * len(df), dtype="Int32")
     df["run_duration_s"] = np.full(len(df), np.nan, dtype=np.float32)
 
@@ -94,12 +81,7 @@ def clean(pings_df: pd.DataFrame, params: CleanParams | None = None) -> pd.DataF
 
 
 def _derive_kinematics(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute ``dt_seconds``, ``displacement_m``, ``speed_ms``, ``bearing_deg``.
-
-    Vectorised single ``Geod.inv`` call yields both distance and forward
-    azimuth in one ellipsoidal pass. First row has NaN for all derived
-    columns (no predecessor).
-    """
+    """Compute ``dt_seconds``, ``displacement_m``, ``speed_ms``, ``bearing_deg``."""
     n = len(df)
     df = df.copy()
 
@@ -146,11 +128,7 @@ def _derive_kinematics(df: pd.DataFrame) -> pd.DataFrame:
 def _flag_device_faults(
     df: pd.DataFrame, reported_speed_ms: pd.Series | None, p: CleanParams
 ) -> None:
-    """Mark all rows ``DEVICE_FAULT`` if the entity is stuck-position w/ reported motion.
-
-    A device that pings repeatedly from the same coordinate while reporting
-    non-zero speed has a broken sensor: trust nothing it reports.
-    """
+    """Mark all rows ``DEVICE_FAULT`` if the entity is stuck-position with reported motion."""
     n = len(df)
     if n < p.device_fault_min_pings:
         return
@@ -186,12 +164,7 @@ def _flag_speed_outliers(df: pd.DataFrame, p: CleanParams) -> None:
 
 
 def _null_outlier_edges(df: pd.DataFrame) -> None:
-    """Both edges touching a SPEED_OUTLIER carry garbage; null both.
-
-    Outlier ping B is the A→B edge; the next ping C is the B→C edge whose
-    derivation came from B's untrusted position. Both lose their derived
-    columns.
-    """
+    """Null derived columns on SPEED_OUTLIER pings and the following row."""
     outlier = (df["quality_flag"] == "SPEED_OUTLIER").to_numpy()
     if not outlier.any():
         return
@@ -219,7 +192,7 @@ def _flag_gaps(df: pd.DataFrame, p: CleanParams) -> None:
 
 
 def _null_gap_edges(df: pd.DataFrame) -> None:
-    """Null derived columns on GAP_FOLLOWS pings (the B→C edge spanning the gap)."""
+    """Null derived columns on GAP_FOLLOWS pings."""
     mask = df["quality_flag"] == "GAP_FOLLOWS"
     if mask.any():
         df.loc[mask, ["speed_ms", "bearing_deg", "displacement_m"]] = _F32_NAN

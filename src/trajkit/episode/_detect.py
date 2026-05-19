@@ -1,15 +1,6 @@
-"""Per-entity episode detection: spatial-envelope closure rule.
+"""Spatial-envelope episode detection (STAY / TRANSIT).
 
-Implements ``detect_episodes``. Two-pass algorithm:
-
-1. Greedy left-to-right scan finds STAY episodes — maximal segment runs
-   whose centroids stay within ``R`` of the running anchor centroid,
-   with grace window ``T`` on departures.
-2. Maximal runs of segments not claimed by any stay become TRANSIT
-   episodes, split where inter-segment time gaps exceed ``T``.
-
-See ``docs/design/episode.md`` for the full specification including
-edge-case handling.
+See ``docs/design/episode.md`` for the design rationale.
 """
 
 from __future__ import annotations
@@ -46,18 +37,8 @@ def detect_episodes(
 ) -> pd.DataFrame:
     """Group segments into STAY / TRANSIT episodes for one entity.
 
-    Parameters
-    ----------
-    segments_df
-        Output of ``trajkit.segment.aggregate_segments`` for one entity.
-        Sorted by ``start_ts``.
-    params
-        Frozen ``EpisodeParams``; defaults are scale-class agnostic.
-
-    Returns
-    -------
-    pd.DataFrame
-        New frame conforming to ``EpisodesSchema``.
+    Input is one entity's segments sorted by ``start_ts``. Output conforms
+    to ``EpisodesSchema``.
     """
     p = params if params is not None else EpisodeParams()
     if len(segments_df) == 0:
@@ -107,13 +88,8 @@ def _find_stays(
             (end_ts[last_idx] - start_ts[first_idx]) / np.timedelta64(1, "s")
         )
 
-        # Two qualification gates:
-        # 1. Stay duration ≥ min_stay_s (the time-based threshold).
-        # 2. Max observed radius ≤ R_m (the space-based threshold). This
-        #    catches the degenerate case where a single spatially-extended
-        #    MOVE segment becomes its own stay anchor — the segment's own
-        #    endpoints exceed R of its centroid, so its envelope_radius_m
-        #    > R, even though the centroid-only check would have passed.
+        # Dual qualification: duration AND max observed radius. The radius
+        # gate rejects the spatially-extended single-segment case.
         if stay_duration_s >= p.min_stay_s and max_radius <= p.R_m:
             stays.append(
                 _StayRecord(
@@ -145,12 +121,8 @@ def _grow_stay(
 ) -> tuple[int, int, float, float, float]:
     """Try to grow a stay starting at index ``i``; return stay extent + anchor.
 
-    A segment is "inside" the envelope iff BOTH endpoints (start, end) are
-    within ``R`` of the running anchor. This rejects spatially extended
-    MOVE segments whose midpoint happens to fall near anchor while the
-    segment itself spans far beyond R — a real bug-class the centroid-only
-    check doesn't catch (a 3-minute 800m walk would otherwise qualify as
-    a stay because its midpoint is one point ≤ R from itself).
+    A segment is "inside" iff both endpoints are within ``R_m`` of the
+    running anchor — endpoint-aware containment, not centroid-only.
     """
     n = len(start_lat)
     cent_lat_i = float((start_lat[i] + end_lat[i]) / 2.0)
@@ -160,15 +132,12 @@ def _grow_stay(
     last_inside = i
     time_outside = 0.0
 
-    # Running mean of inside segments' centroids — the anchor.
     inside_cent_lat = [cent_lat_i]
     inside_cent_lon = [cent_lon_i]
-    # All inside-segment endpoints — for honest envelope_radius_m reporting.
     inside_endpoint_lat = [float(start_lat[i]), float(end_lat[i])]
     inside_endpoint_lon = [float(start_lon[i]), float(end_lon[i])]
 
     for j in range(i + 1, n):
-        # Inter-segment gap also closes the stay (gotcha #5).
         gap_s = float((start_ts[j] - end_ts[j - 1]) / np.timedelta64(1, "s"))
         if gap_s > p.T_s:
             break
@@ -195,9 +164,8 @@ def _grow_stay(
             if time_outside >= p.T_s:
                 break
 
-    # Recompute max observed radius against the FINAL anchor across all
-    # inside-segment endpoints — running mean drifted while accumulating, so
-    # per-step radii are stale.
+    # Recompute against the final anchor — running mean drifted while
+    # accumulating, so per-step radii are stale.
     radii = _haversine_array(
         anchor_lat,
         anchor_lon,
@@ -219,7 +187,7 @@ def _find_transits(
     n: int,
     p: EpisodeParams,
 ) -> list[_TransitRecord]:
-    """Each maximal run of unclaimed segments becomes a TRANSIT, split on gaps."""
+    """Each maximal run of unclaimed segments becomes a TRANSIT, split on gaps > T_s."""
     in_stay = np.zeros(n, dtype=bool)
     for s in stays:
         in_stay[s["first_idx"] : s["last_idx"] + 1] = True
@@ -231,7 +199,6 @@ def _find_transits(
             i += 1
             continue
 
-        # Walk a run of non-stay segments, splitting where inter-segment gap > T.
         run_start = i
         chunk_start = i
         j = i

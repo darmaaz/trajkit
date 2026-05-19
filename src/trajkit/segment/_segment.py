@@ -1,12 +1,6 @@
-"""Per-entity segmentation: hysteresis state machine, boundary detection, classification.
+"""Hysteresis state machine + circular-R bearing detection + segment classification.
 
-Implements ``segment`` and its private helpers. Single-entity input
-sorted by ``ts`` from ``trajkit.clean``. Output is a frame conforming to
-``SegmentedPingsSchema``: input columns plus ``segment_id`` and
-``segment_type``.
-
-See ``docs/design/segment.md`` for the full specification, including the
-rationale for the four-state taxonomy and the closure rules.
+See ``docs/design/segment.md`` for the design rationale.
 """
 
 from __future__ import annotations
@@ -25,17 +19,8 @@ def segment(
 ) -> pd.DataFrame:
     """Add ``segment_id`` and ``segment_type`` to a cleaned per-ping frame.
 
-    Parameters
-    ----------
-    cleaned_pings_df
-        Output of ``trajkit.clean.clean`` for one entity. Sorted by ``ts``.
-    params
-        Frozen ``SegmentParams``; defaults are scale-class agnostic.
-
-    Returns
-    -------
-    pd.DataFrame
-        New frame conforming to ``SegmentedPingsSchema``.
+    Input is one entity's cleaned pings sorted by ``ts``. Output conforms
+    to ``SegmentedPingsSchema``.
     """
     p = params if params is not None else SegmentParams()
     n = len(cleaned_pings_df)
@@ -83,19 +68,10 @@ def segment(
 
 
 def _fill_outlier_nans(speed: pd.Series, quality_flag: pd.Series) -> np.ndarray:
-    """Fill NaN speeds caused by outlier-edge nulling, but not across GAP_FOLLOWS.
-
-    The cleaning layer nulls speed on outlier-tainted pings. Those nulls
-    should inherit motion state from neighbours (a 1–2 ping outlier in
-    the middle of a movement run shouldn't break the segment). But a
-    GAP_FOLLOWS marks a discontinuity where state must NOT propagate,
-    so we forward/backward-fill within gap-bounded runs only.
-
-    Note: ``quality_flag`` is a pandas StringDtype column. Equality
-    against a string literal returns ``bool[pyarrow]``, which doesn't
-    support ``cumsum``; we materialise the mask as numpy bool first.
-    """
+    """Fill NaN speeds from outlier-edge nulling, but never across a GAP_FOLLOWS."""
     s = speed.copy()
+    # quality_flag is StringDtype → equality yields bool[pyarrow], which doesn't
+    # support cumsum; materialise as numpy bool first.
     gap_arr = (quality_flag == "GAP_FOLLOWS").to_numpy(dtype=bool)
     fill_group = pd.Series(np.cumsum(gap_arr), index=speed.index)
     filled = (
@@ -155,7 +131,6 @@ def _filter_short_stops(
     run_end = df["ts"].groupby(run_id).transform("max")
     run_duration = (run_end - run_start).dt.total_seconds()
     if "run_duration_s" in df.columns:
-        # Merged data: add the trailing time the last row in the run represents.
         last_run = df["run_duration_s"].groupby(run_id).transform("last")
         run_duration = run_duration + last_run.fillna(0.0)
 
@@ -177,52 +152,7 @@ def _state_change_boundaries(is_stop: np.ndarray) -> np.ndarray:
 def _bearing_boundaries(
     df: pd.DataFrame, is_stop: np.ndarray, p: SegmentParams
 ) -> np.ndarray:
-    """True where a direction change should split a MOVE.
-
-    Detector: mean resultant length ``R`` of bearings inside a *distance-
-    based* sliding window centred on each ping. Low R = bearings spread
-    around the unit circle = direction is changing. High R = bearings
-    cluster = direction is stable. Multi-scale (short + long windows)
-    catches both street-corner turns and arterial / sustained turns.
-
-    Why circular statistics. Bearing is angular: averaging linear deltas
-    confounds "single sharp turn" (one big delta diluted by many zeros)
-    with "noise around a stable direction" (deltas oscillating around
-    zero). R correctly distinguishes them — the unit-circle vector mean
-    has length 1 for tight clusters and < 1 for spread.
-
-    Why distance windows. Time-based windows are ping-rate-dependent: a
-    90° turn at 1-Hz pings dilutes to ≈ 1° per ping in a 2-min window
-    while the same turn at 1-min pings shows as ≈ 90°. A 200 m window
-    contains the same physical-behaviour magnitude regardless of ping
-    rate.
-
-    Why multi-scale. A 200 m window smears a sharp street-corner over a
-    long stretch — most of the window still points in the pre-turn
-    direction, so R stays high and the corner is missed. A 75 m short
-    window concentrates the turn in a larger fraction of the window and
-    pulls R below the entry threshold. Long windows catch arterial /
-    sustained turns; short windows catch street corners. Boundary fires
-    when R drops in *either* window.
-
-    Why hysteresis. Two-threshold Schmitt trigger over distance:
-
-    * Enter "direction-changing" when R drops below ``bearing_r_enter``
-      (in either window) and stays there for ``bearing_sustain_m`` metres.
-    * Exit when R rises above ``bearing_r_exit`` (in both windows) and
-      stays there for ``bearing_sustain_m`` metres.
-
-    Boundary fires on entry (the rising edge of the in-direction-change
-    state). Restricted to moving pings; stopped-period bearings are
-    masked out so they don't pollute R.
-
-    Sparse-window guard: a per-window minimum count blocks R from being
-    computed on starved windows. The configured
-    ``bearing_window_min_pings`` is the ceiling; it adapts down to a
-    floor of 2 when the trace's observed median per-ping displacement
-    would otherwise make the configured value impossible to satisfy
-    inside ``window_m``. See ``_effective_min_pings`` for the rule.
-    """
+    """True where a direction change should split a MOVE."""
     n = len(df)
     boundary = np.zeros(n, dtype=bool)
     moving = ~is_stop
@@ -232,15 +162,12 @@ def _bearing_boundaries(
     bearing_arr = df["bearing_deg"].to_numpy(dtype=np.float64)
     valid = moving & ~np.isnan(bearing_arr)
 
-    # Cumulative distance over MOTION ONLY (stops collapse to zero so a
-    # pause in a journey doesn't burn the window with no-progress pings).
+    # Stop-period displacement collapses to zero so a pause in a journey
+    # doesn't burn the window with no-progress pings.
     disp = df["displacement_m"].fillna(0.0).to_numpy(dtype=np.float64)
     disp_motion = np.where(moving, disp, 0.0)
     cum_dist = np.cumsum(disp_motion)
 
-    # The configured ``bearing_window_min_pings`` is the CEILING; the
-    # per-window minimum adapts to the actual ping density inside each
-    # window. See ``_circular_r_over_distance`` for the rule.
     r_short = _circular_r_over_distance(
         cum_dist, bearing_arr, valid,
         p.bearing_window_short_m, p.bearing_window_min_pings,
@@ -250,9 +177,8 @@ def _bearing_boundaries(
         p.bearing_window_long_m, p.bearing_window_min_pings,
     )
 
-    # NaN R is ambiguous evidence — neither low nor high. For entry,
-    # treat NaN as "high" (won't trigger entry); for exit, treat as "low"
-    # (won't trigger exit). Either way, sparse windows are conservative.
+    # NaN R = sparse window. Treat as "high" for entry (won't trigger) and
+    # "low" for exit (won't trigger) — sparse windows stay conservative.
     short_high = np.where(np.isnan(r_short), 1.0, r_short)
     long_high = np.where(np.isnan(r_long), 1.0, r_long)
     short_low = np.where(np.isnan(r_short), 0.0, r_short)
@@ -265,7 +191,6 @@ def _bearing_boundaries(
         cum_dist, enter_signal, exit_signal, p.bearing_sustain_m
     )
 
-    # Boundary fires on rising edge of in_change state, on a moving ping.
     in_change_active = in_change & moving
     boundary[1:] = in_change_active[1:] & ~in_change_active[:-1]
     return boundary
@@ -280,21 +205,9 @@ def _circular_r_over_distance(
 ) -> np.ndarray:
     """Mean resultant length R over a symmetric-distance window per ping.
 
-    Vectorised via cumulative sums of cos/sin/valid-count and binary
-    searches on ``cum_dist`` — O(n log n) over the trace.
-
-    Uses ``cos`` / ``sin`` of bearings directly, which side-steps the
-    angular wraparound problem entirely (no signed-delta needed; the
-    unit-circle vector mean *is* circularly correct by construction).
-
-    The ``min_count`` parameter is the **ceiling** of the per-window
-    minimum-valid-bearings guard. The effective minimum per window
-    adapts to the actual ping count in the window: ``max(2, floor(
-    n_in_window / 2))``, clamped at ``min_count``. This keeps the
-    detector from going blind on sparse-cadence data (e.g. 5 s
-    vehicular pings) while preserving the high-density confidence
-    bar on dense data. A hard floor of 2 prevents R from being
-    computed on a single sample.
+    ``min_count`` is the ceiling of the per-window valid-bearings guard;
+    the floor is ``max(2, n_in_window // 2)`` so the detector stays
+    responsive on sparse-cadence data.
     """
     n = len(cum_dist)
     if n == 0:
@@ -333,14 +246,7 @@ def _distance_hysteresis(
     exit_signal: np.ndarray,
     sustain_m: float,
 ) -> np.ndarray:
-    """Schmitt-trigger state machine over cumulative distance.
-
-    Enters the "low-R" state when ``enter_signal`` has been True
-    continuously for ``sustain_m`` metres; exits when ``exit_signal`` has
-    been True continuously for ``sustain_m`` metres. Pending-distance
-    counter resets whenever the relevant signal goes False, preventing
-    intermittent low-R blips from accumulating into a state flip.
-    """
+    """Schmitt-trigger state machine over cumulative distance."""
     n = len(cum_dist)
     in_low = np.zeros(n, dtype=bool)
     if n == 0:
@@ -378,16 +284,12 @@ def _classify_segments(
     is_stop: np.ndarray,
     p: SegmentParams,
 ) -> pd.Series:
-    """Assign one of {MOVE, MOVE_BRIEF, STOP_BRIEF, STOP_DWELL} per ping.
-
-    All pings within a segment receive the same label.
-    """
+    """Label each segment with one of MOVE / MOVE_BRIEF / STOP_BRIEF / STOP_DWELL."""
     seg_series = pd.Series(seg_num, index=df.index, name="_seg")
 
     is_stop_s = pd.Series(is_stop, index=df.index)
     seg_is_stop = is_stop_s.groupby(seg_series).transform("mean") > 0.5
 
-    # Duration: ts span + trailing run_duration_s (for merged data)
     seg_start = df["ts"].groupby(seg_series).transform("min")
     seg_end = df["ts"].groupby(seg_series).transform("max")
     seg_duration_s = (seg_end - seg_start).dt.total_seconds()
@@ -401,8 +303,8 @@ def _classify_segments(
     types[seg_is_stop & (seg_duration_min >= p.dwell_threshold_min)] = "STOP_DWELL"
     types[seg_is_stop & (seg_duration_min < p.dwell_threshold_min)] = "STOP_BRIEF"
 
-    # False-stop override: a segment classified STOP* but with significant
-    # crow-fly displacement is actually slow-moving traffic, not a real stop.
+    # False-stop override: STOP* with significant crow-fly displacement is
+    # slow-moving traffic, not a real stop.
     seg_first_lat = df["lat"].groupby(seg_series).transform("first")
     seg_first_lon = df["lon"].groupby(seg_series).transform("first")
     seg_last_lat = df["lat"].groupby(seg_series).transform("last")
@@ -416,9 +318,8 @@ def _classify_segments(
     is_stop_label = types.isin(["STOP_DWELL", "STOP_BRIEF"])
     types[is_stop_label & (crow_fly > p.max_stop_displacement_m)] = "MOVE"
 
-    # MOVE → MOVE_BRIEF if both ping count and duration are below thresholds
     if "merge_count" in df.columns:
-        # Sum the per-row merge_count to recover raw ping counts per segment
+        # Sum per-row merge_count to recover raw ping counts per segment.
         raw_pings = df["merge_count"].fillna(1).groupby(seg_series).transform("sum")
     else:
         raw_pings = seg_series.groupby(seg_series).transform("size")

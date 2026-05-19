@@ -1,12 +1,7 @@
 """FAISS-backed similarity index, search, and persistence.
 
-Implements ``Index``, ``Hit``, ``build_index``, ``search``, ``save_index``,
-and ``load_index``. v0.1.0 ships only ``IndexFlatIP`` (cosine) and
-``IndexFlatL2``; approximate indices (HNSW, IVF) are deferred to v2.
-
-FAISS is imported lazily so ``import trajkit.compare`` succeeds without
-the ``[search]`` extra installed; the ImportError surfaces only when
-the user actually calls a function that needs it.
+Exposes ``IndexFlatIP`` (cosine) and ``IndexFlatL2`` via ``build_index``,
+top-k ``search``, and FAISS-native ``save_index`` / ``load_index``.
 """
 
 from __future__ import annotations
@@ -16,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import faiss
 import numpy as np
 
 _F32 = np.float32
@@ -28,10 +24,8 @@ _META_FILENAME = "meta.json"
 class Hit:
     """A single similarity-search result.
 
-    ``id`` is the segment / episode id supplied at index-build time.
-    ``score`` is the similarity (higher = more similar) for cosine; for
-    L2 it is the negative distance. ``rank`` is the 0-indexed position
-    in the result list.
+    ``score`` is the inner product for cosine (higher = more similar) or
+    the negative L2 distance, depending on the index's metric.
     """
 
     id: str
@@ -75,22 +69,10 @@ def build_index(
 ) -> Index:
     """Build an ``Index`` over ``vectors`` keyed by ``ids``.
 
-    Parameters
-    ----------
-    vectors
-        ``(N, D)`` float32 array. Coerced to float32 + contiguous if needed.
-    ids
-        Row-aligned identifier list of length ``N``.
-    metric
-        ``"cosine"`` (IndexFlatIP) or ``"l2"`` (IndexFlatL2).
-    normalize
-        ``"auto"`` (default): normalise iff cosine and rows aren't already
-        unit-norm. ``"always"`` forces normalisation. ``"never"`` skips it
-        even for cosine — caller takes responsibility for FAISS's
-        cosine-via-IP requirement.
+    ``normalize="auto"`` row-normalises when cosine is requested and rows
+    aren't already unit-norm; ``"always"`` forces it; ``"never"`` skips
+    it even for cosine.
     """
-    faiss = _import_faiss()
-
     if metric not in _VALID_METRICS:
         msg = f"unknown metric {metric!r}; valid options: {_VALID_METRICS}"
         raise ValueError(msg)
@@ -130,22 +112,8 @@ def search(
 ) -> list[Hit]:
     """Top-``k`` nearest neighbours for a single query vector.
 
-    Parameters
-    ----------
-    index
-        Built via ``build_index``.
-    query
-        1-D ``(D,)`` or 2-D ``(1, D)`` float32 query.
-    k
-        Number of results requested. ``filter_ids`` may yield fewer than
-        ``k`` if the candidate pool is small; the function does not
-        backfill from below the filter cut.
-    filter_ids
-        Optional set of ids to restrict results to. Implemented as a
-        post-search rerank: the FAISS query overshoots when filtering,
-        then the result list is filtered down. Column-level metadata
-        filtering belongs upstream — pre-compute the id set and pass it
-        in.
+    ``filter_ids`` is applied as a post-search rerank — fewer than ``k``
+    hits may be returned if the filtered pool is small.
     """
     if query.ndim == 1:
         query_arr = query.reshape(1, -1)
@@ -161,10 +129,8 @@ def search(
         raise ValueError(msg)
 
     query_arr = np.ascontiguousarray(query_arr, dtype=_F32)
-    # For cosine search, the index rows are already L2-normalised at build
-    # time (unless the user explicitly passed normalize="never"). Normalise
-    # the query too so the inner-product equals true cosine similarity in
-    # the canonical [-1, 1] range.
+    # Normalise the query to match the (build-time) row-normalised index
+    # so the inner product is true cosine similarity.
     if index.metric == "cosine":
         query_arr = _normalize_rows(query_arr)
 
@@ -195,7 +161,6 @@ def search(
 
 def save_index(index: Index, path: str | Path) -> None:
     """Persist ``index`` to a directory containing the FAISS file + meta."""
-    faiss = _import_faiss()
     target = Path(path)
     target.mkdir(parents=True, exist_ok=True)
     faiss.write_index(index._faiss, str(target / _INDEX_FILENAME))
@@ -205,7 +170,6 @@ def save_index(index: Index, path: str | Path) -> None:
 
 def load_index(path: str | Path, *, mmap: bool = False) -> Index:
     """Load an ``Index`` previously saved with ``save_index``."""
-    faiss = _import_faiss()
     src = Path(path)
     if not src.exists():
         msg = f"index path does not exist: {src}"
@@ -217,19 +181,6 @@ def load_index(path: str | Path, *, mmap: bool = False) -> Index:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
-
-
-def _import_faiss() -> Any:
-    """Lazy faiss import with a friendly error message."""
-    try:
-        import faiss as _faiss
-    except ImportError as e:  # pragma: no cover
-        msg = (
-            "trajkit.compare requires the [search] extra. Install with "
-            "`pip install 'trajkit[search]'` or `pip install faiss-cpu`."
-        )
-        raise ImportError(msg) from e
-    return _faiss
 
 
 def _is_unit_norm(vectors: np.ndarray, tol: float = 1e-3) -> bool:

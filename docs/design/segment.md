@@ -17,10 +17,9 @@ The output is the input to `episode` (multi-segment grouping) and `embed`
 - Sorted by `ts`; the state machine consumes ping order, not real-time.
 - Time gaps within the trace terminate the current segment regardless of
   state (a gap is, by construction, not part of any segment's behavior).
-- The four-state taxonomy is fixed in v1. Plugin extensibility is deferred
-  to v2 (LIBRARY.md D6) — the maritime use case may motivate it.
-- Hysteresis thresholds are calibrated per scale class via presets; users
-  override per-call via `SegmentParams`.
+- The four-state taxonomy is fixed.
+- Hysteresis thresholds are user-decided; pass a custom `SegmentParams`
+  to retune for your scale.
 - Pings flagged `DEVICE_FAULT` or `SPEED_OUTLIER` are treated as missing
   (excluded from speed/bearing decisions but kept in the row count).
 
@@ -121,31 +120,11 @@ on a circular-difference array, O(N).
 ## Usage
 
 ```python
-import trajkit
+from trajkit.segment import segment, aggregate_segments, SegmentParams
 
-per_ping_segmented = trajkit.segment(clean_df, trajkit.SegmentParams.from_preset("logistics_vehicle"))
-segments_df = trajkit.aggregate_segments(per_ping_segmented)
-
-# Inside L3 runner: stage="segment" produces only segments_df (per-ping
-# segmented frame is intermediate, not persisted).
+per_ping_segmented = segment(clean_df, SegmentParams())
+segments_df = aggregate_segments(per_ping_segmented)
 ```
-
-## Successful deliverable
-
-- [ ] `segment(pings_df, params) -> pd.DataFrame` — emits `segment_id`,
-      `segment_type`. Properties: every ping assigned exactly one
-      `segment_id`; consecutive same-type pings share `segment_id`; gap
-      always terminates the segment; sustained-bearing split honored.
-- [ ] `aggregate_segments(per_ping_df) -> pd.DataFrame` — output validates
-      `Segments` schema. No zero-duration segments. `straightness ∈ [0, 1]`.
-- [ ] `SegmentParams` model — frozen, all thresholds explicit.
-- [ ] Synthetic-trace tests: drive-stop-drive, oscillation at the speed
-      boundary (hysteresis works), sustained turn, turn-without-sustain,
-      `MOVE_BRIEF` recognition, gap-terminated segment, single-ping segment
-      rejection.
-- [ ] Property test: applying `segment` then `aggregate_segments` and
-      summing `duration_s` recovers the trace duration ± gap totals.
-- [ ] ≥ 80% line coverage.
 
 ## Not in this layer
 

@@ -1,8 +1,7 @@
 # Geolife integration
 
 End-to-end run of the trajkit pipeline on the Microsoft Geolife dataset
-— the v0.1.0 cross-domain validation gate (pedestrian / multi-modal,
-non-fleet).
+(pedestrian / multi-modal GPS, non-fleet).
 
 ## What's here
 

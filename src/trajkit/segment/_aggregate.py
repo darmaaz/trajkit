@@ -1,12 +1,6 @@
-"""Per-segment aggregation: collapse segmented per-ping into one row per segment.
+"""Collapse a segmented per-ping frame into one row per segment.
 
-Implements ``aggregate_segments``. Output conforms to ``SegmentsSchema``.
-
-The reference fleet implementation also produced sequence/neighbour
-context features, road-class and POI dominance, and quality-flag
-counts; those live outside the v0.1.0 ``SegmentsSchema`` and either move
-into ``trajkit.embed`` feature plugins or are dropped as fleet-specific
-diagnostics.
+Output conforms to ``SegmentsSchema``.
 """
 
 from __future__ import annotations

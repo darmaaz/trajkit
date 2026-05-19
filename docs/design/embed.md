@@ -85,17 +85,6 @@ vectors, ids = embed_segments(
 )
 ```
 
-## Deliverable
-
-- [x] `embed_segments` — base recipe with four blocks. Output is a
-      contiguous `float32` array, FAISS-ready.
-- [x] `FeaturePlugin` Protocol with shape-contract validation at every
-      call.
-- [x] `EmbedParams` with `expected_dim(features)` callable before data
-      flows.
-- [x] Property test: vectors are unit-norm to within float32 epsilon
-      when `params.l2_normalize=True`.
-
 ## Not in this layer
 
 - FAISS index — [`compare`](compare.md).

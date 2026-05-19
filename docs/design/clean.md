@@ -66,15 +66,6 @@ from trajkit.clean import clean, CleanParams
 clean_df = clean(pings_df, CleanParams())
 ```
 
-## Deliverable
-
-- [x] `clean(pings_df, params) -> pd.DataFrame`. Output validates against
-      the `CleanedPings` schema in `schemas.md`.
-- [x] `CleanParams` Pydantic v2 model — frozen, `extra='forbid'`.
-- [x] Synthetic-fixture tests covering: pristine input, mid-trace gap,
-      drift cluster, speed outlier, duplicate run, naive ts (raises),
-      reversed (lon, lat) (raises at schema validation).
-
 ## Not in this layer
 
 - Trajectory segmentation — [`segment`](segment.md).

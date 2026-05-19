@@ -6,16 +6,14 @@ document refers back to this one.
 Each schema is declared **twice** in `trajkit.types`: once as a Pandera
 `DataFrameSchema` for runtime validation, once as a `pyarrow.Schema` for
 storage round-trip. A test asserts the two declarations are consistent
-(column names, dtypes, nullability). Validation runs at the L2 boundary
-on read, and at pass-2 boundaries on read; L1 pure functions trust the
-contract for speed.
+(column names, dtypes, nullability). Pipeline functions trust the
+contract for speed; validate at the entry point if you don't.
 
 ## Versioning
 
-Each schema carries a `schema_version: str` carried as Pandera metadata and
-written as parquet key-value metadata under `trajkit.schema_version`. Readers
-tolerate missing-with-default for columns added in later versions. v0.1.0
-schemas start at version `1`.
+Each schema carries a `schema_version: str` written as parquet
+key-value metadata under `trajkit.schema_version`. Readers tolerate
+missing-with-default for columns added in later versions.
 
 ---
 
@@ -56,7 +54,7 @@ Cleaned pings plus:
 | `segment_id` | `string` | no | format `<entity_id>_seg_<NNNNN>` | monotonic per entity |
 | `segment_type` | `string` | no | enum below | one value per consecutive run |
 
-`segment_type` enum: `MOVE`, `MOVE_BRIEF`, `STOP_BRIEF`, `STOP_DWELL`. Fixed in v1.
+`segment_type` enum: `MOVE`, `MOVE_BRIEF`, `STOP_BRIEF`, `STOP_DWELL`.
 
 ## Segments — output of `aggregate_segments`
 
