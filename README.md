@@ -58,7 +58,7 @@ it; that's what the code is for.
 ## Run it
 
 ```bash
-git clone <url>
+git clone https://github.com/darmaaz/trajkit.git
 cd trajkit
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -97,4 +97,4 @@ instructions.
 
 ## License
 
-See [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE).
