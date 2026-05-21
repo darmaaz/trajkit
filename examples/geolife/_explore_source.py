@@ -119,7 +119,7 @@ print(f"Episodes:              {len(episodes):>7,} "
       f"TRANSIT={(episodes['episode_type']=='TRANSIT').sum()})")
 
 # %% [markdown]
-# ## 4. Pings → Segments → Episodes
+# ## 3. Pings → Segments → Episodes
 #
 # A three-level hierarchy:
 #
@@ -161,7 +161,7 @@ print("└── (each segment in turn is a contiguous run of pings)")
 # is this?"; segment-level is too noisy; episode-level is the right grain.
 
 # %% [markdown]
-# ## 5. Segment-type breakdown
+# ## 4. Segment-type breakdown
 #
 # Atomic count + total duration share per segment type.
 
@@ -184,7 +184,148 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 6. Map: segments along the actual ping path
+# ## 5. Hysteresis at work
+#
+# The state machine has a *dead zone* between `stop_speed_kmh` and
+# `resume_speed_kmh`. While speed is in the dead zone, the inferred
+# state stays put. The plot below zooms into a boundary region scored
+# for non-trivial dead-zone activity. The speed line repeatedly dips
+# into the dead zone without flipping the state band underneath — that
+# stability is the whole point of using two thresholds.
+
+# %%
+_per_ping = per_ping_segmented.copy()
+_per_ping["_is_stop"] = _per_ping["segment_type"].str.startswith("STOP")
+_per_ping["_state_change"] = _per_ping["_is_stop"] != _per_ping["_is_stop"].shift(
+    1, fill_value=_per_ping["_is_stop"].iloc[0]
+)
+stop_ms_ = SEG_PARAMS.stop_speed_kmh * (1000.0 / 3600.0)
+resume_ms_ = SEG_PARAMS.resume_speed_kmh * (1000.0 / 3600.0)
+ds = _per_ping["speed_ms"].fillna(0.0).to_numpy()
+in_dead = (ds > stop_ms_) & (ds < resume_ms_)
+
+_WIN = 120
+_csum = np.concatenate([[0], np.cumsum(in_dead.astype(int))])
+_best_idx, _best_score = None, -1
+for b in _per_ping.index[_per_ping["_state_change"]]:
+    lo = max(0, int(b) - _WIN // 2)
+    hi = min(len(_per_ping), int(b) + _WIN // 2)
+    score = int(in_dead[lo:hi].sum())
+    if score > _best_score:
+        _best_score, _best_idx = score, int(b)
+
+if _best_idx is None:
+    print("no state transitions in this slice — hysteresis demo skipped")
+else:
+    lo = max(0, _best_idx - _WIN // 2)
+    hi = min(len(_per_ping), _best_idx + _WIN // 2)
+    view = _per_ping.iloc[lo:hi].reset_index(drop=True)
+    speed_kmh = view["speed_ms"].fillna(0.0) * 3.6
+    elapsed_s = (view["ts"] - view["ts"].iloc[0]).dt.total_seconds()
+    state = view["_is_stop"].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(11, 4))
+    ax.plot(elapsed_s, speed_kmh, color="#1f77b4", lw=1.5, label="speed (km/h)")
+    ax.axhspan(SEG_PARAMS.stop_speed_kmh, SEG_PARAMS.resume_speed_kmh,
+               color="#9999cc", alpha=0.15, label="dead zone")
+    ax.axhline(SEG_PARAMS.stop_speed_kmh, color="#d62728", lw=1, ls="--",
+               label=f"stop_speed = {SEG_PARAMS.stop_speed_kmh} km/h")
+    ax.axhline(SEG_PARAMS.resume_speed_kmh, color="#2ca02c", lw=1, ls="--",
+               label=f"resume_speed = {SEG_PARAMS.resume_speed_kmh} km/h")
+    prev_s, band_start = state[0], 0
+    for k in range(1, len(state) + 1):
+        if k == len(state) or state[k] != prev_s:
+            colour = "#fbb4b4" if prev_s else "#bbe1bb"
+            ax.axvspan(elapsed_s.iloc[band_start],
+                       elapsed_s.iloc[min(k, len(state) - 1)],
+                       ymax=0.06, color=colour, alpha=0.7)
+            if k < len(state):
+                band_start, prev_s = k, state[k]
+    ax.set_ylim(0, max(float(speed_kmh.max()) * 1.1, SEG_PARAMS.resume_speed_kmh * 1.5))
+    ax.set_xlabel("seconds since window start")
+    ax.set_ylabel("speed (km/h)")
+    ax.set_title("Hysteresis: speed weaves through the dead zone; bottom band = inferred state")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.2)
+    plt.tight_layout(); plt.show()
+    print(f"window: {_best_score} dead-zone pings out of {hi - lo}; "
+          f"state transitions: {int(view['_state_change'].sum())}")
+
+# %% [markdown]
+# ## 6. Why `GAP_FOLLOWS` outranks `DRIFT`
+#
+# The cleaning layer's flag precedence is
+# `DEVICE_FAULT > SPEED_OUTLIER > GAP_FOLLOWS > DRIFT > VALID`. The
+# non-obvious choice is `GAP_FOLLOWS > DRIFT`. A ping after a long gap
+# has a tiny implied displacement and a near-zero effective speed only
+# because the position was sampled minutes or hours apart — the drift
+# heuristic would mis-claim it as drift, and the segmenter would then
+# see no gap boundary and grow segments straight across the missing
+# interval.
+#
+# Below: for every `GAP_FOLLOWS` ping in the trace, what would the
+# naive "drift first" rule have said?
+
+# %%
+_drift_ms = CLEAN_PARAMS.drift_speed_kmh * (1000.0 / 3600.0)
+_gap_mask = (cleaned_per_ping["quality_flag"] == "GAP_FOLLOWS").to_numpy()
+
+# Re-derive raw kinematics that drift would have inspected, ignoring the
+# gap-edge nulling that clean() performs.
+_lat = cleaned_per_ping["lat"].to_numpy()
+_lon = cleaned_per_ping["lon"].to_numpy()
+_prev_lat = np.concatenate([[np.nan], _lat[:-1]])
+_prev_lon = np.concatenate([[np.nan], _lon[:-1]])
+_dt = cleaned_per_ping["dt_seconds"].to_numpy()
+_EARTH = 6_371_000.0
+_phi1, _phi2 = np.radians(_prev_lat), np.radians(_lat)
+_dphi = np.radians(_lat - _prev_lat)
+_dlmb = np.radians(_lon - _prev_lon)
+_a = np.sin(_dphi / 2) ** 2 + np.cos(_phi1) * np.cos(_phi2) * np.sin(_dlmb / 2) ** 2
+_raw_disp = 2 * _EARTH * np.arcsin(np.sqrt(_a))
+_raw_disp = np.where(np.isnan(_raw_disp), 0.0, _raw_disp)
+with np.errstate(divide="ignore", invalid="ignore"):
+    _raw_speed_ms = np.where(_dt > 0, _raw_disp / _dt, np.inf)
+
+_would_be_drift = (
+    (_raw_disp > 0)
+    & (_raw_disp < CLEAN_PARAMS.drift_radius_m)
+    & (_raw_speed_ms < _drift_ms)
+)
+_caught_by_precedence = int((_gap_mask & _would_be_drift).sum())
+_total_gap = int(_gap_mask.sum())
+print(
+    f"GAP_FOLLOWS pings: {_total_gap}\n"
+    f"  would have been DRIFT under naive ordering: {_caught_by_precedence}"
+    f"  ({100 * _caught_by_precedence / max(_total_gap, 1):.1f}%)"
+)
+
+_sample_rows = []
+for idx in np.where(_gap_mask)[0][:6]:
+    _sample_rows.append({
+        "row": int(idx),
+        "dt_h": round(float(_dt[idx]) / 3600.0, 2),
+        "raw_disp_m": round(float(_raw_disp[idx]), 1),
+        "raw_speed_kmh": round(float(_raw_speed_ms[idx]) * 3.6, 3),
+        "naive_DRIFT_would_fire": bool(
+            _raw_disp[idx] > 0
+            and _raw_disp[idx] < CLEAN_PARAMS.drift_radius_m
+            and _raw_speed_ms[idx] < _drift_ms
+        ),
+    })
+print()
+print(pd.DataFrame(_sample_rows).to_string(index=False))
+
+# %% [markdown]
+# Most gap-edge pings have tiny implied displacement (the device pinged
+# from nearly the same place after a multi-hour silence). Without the
+# precedence rule those would be labelled `DRIFT`, no gap boundary
+# would fire in the segmenter, and a segment would grow straight across
+# the unobserved interval. The precedence is what keeps that from
+# happening.
+
+# %% [markdown]
+# ## 7. Map: segments along the actual ping path
 #
 # Two views of the same segmentation. The first map traces the **actual
 # GPS pings** of each segment — segments respect the natural shape of the
@@ -281,7 +422,7 @@ m_segments_simplified.save("segments_simplified_map.html")
 m_segments_simplified
 
 # %% [markdown]
-# ## 7. Anatomy of one segment
+# ## 8. Anatomy of one segment
 #
 # A segment is a sequence of pings sharing one motion type, not a
 # straight line. `displacement_m` is the bird's-eye gap;
@@ -354,28 +495,51 @@ m_one_seg
 # 1.0`; a winding walk lands closer to 0.3.
 
 # %% [markdown]
-# ## 7b. A bearing-driven boundary
+# ## 9. A bearing-driven boundary
 #
-# A pair of consecutive `MOVE` segments with no stop or gap between them
-# can only have been split by the bearing detector. The map shows the
-# transition; the R plot below shows the circular concentration in both
-# distance windows plunging through the entry threshold at the boundary
-# — that drop is why the split fired.
+# Programmatically pick a pair of consecutive `MOVE` segments joined at
+# one ping interval with no `GAP_FOLLOWS` flag. Neither the state-change
+# detector nor the gap detector could have fired here — the only thing
+# that could have split them is the bearing detector. The map shows the
+# transition; the R plot below shows the circular-concentration curves
+# (short and long windows) plunging through the entry threshold at the
+# boundary.
 
 # %%
 from trajkit.segment._segment import _circular_r_over_distance  # noqa: E402
 
-TARGET_SEG = "000_seg_00876"
-ctx_pings_before = 30   # last N pings of preceding segment, for R-curve context
-ctx_pings_after  = 120  # first N pings of the target segment, for R-curve context
+# Find a real MOVE → MOVE boundary: adjacent same-segment-type segments,
+# joined at one ping interval, where the join ping is NOT GAP_FOLLOWS.
+# That means neither the state-change nor the gap detector fired — the
+# only thing that could have split them is the bearing detector.
+sorted_segs = segments.sort_values("start_ts").reset_index(drop=True)
+ctx_pings_before = 30
+ctx_pings_after = 120
+best = None
+for i in range(len(sorted_segs) - 1):
+    a, b = sorted_segs.iloc[i], sorted_segs.iloc[i + 1]
+    if a["segment_type"] != "MOVE" or b["segment_type"] != "MOVE":
+        continue
+    if a["n_pings"] < ctx_pings_before or b["n_pings"] < ctx_pings_after:
+        continue
+    b_first_idx = int(per_ping_segmented.index[
+        per_ping_segmented["segment_id"] == b["segment_id"]
+    ].min())
+    if per_ping_segmented["quality_flag"].iloc[b_first_idx] == "GAP_FOLLOWS":
+        continue
+    score = float(a["path_length_m"]) + float(b["path_length_m"])
+    if best is None or score > best["score"]:
+        best = {"prev_id": a["segment_id"], "next_id": b["segment_id"],
+                "b_first_idx": b_first_idx, "score": score}
+if best is None:
+    raise RuntimeError("no MOVE → MOVE boundary found in this slice")
 
+TARGET_SEG = best["next_id"]
+prev_seg_id = best["prev_id"]
+prev_seg_type = "MOVE"
 target_mask = per_ping_segmented["segment_id"] == TARGET_SEG
-if not target_mask.any():
-    raise RuntimeError(f"{TARGET_SEG} not found in per-ping frame")
-target_idx0 = int(per_ping_segmented.index[target_mask].min())
+target_idx0 = best["b_first_idx"]
 target_idx_last = int(per_ping_segmented.index[target_mask].max())
-prev_seg_id = per_ping_segmented["segment_id"].iloc[target_idx0 - 1]
-prev_seg_type = per_ping_segmented["segment_type"].iloc[target_idx0 - 1]
 target_meta = segments.loc[segments["segment_id"] == TARGET_SEG].iloc[0]
 
 # Two scopes:
@@ -470,7 +634,7 @@ plt.tight_layout(); plt.show()
 # without the coincident state-change vote.
 
 # %% [markdown]
-# ## 8. Stay duration distribution
+# ## 10. Stay duration distribution
 
 # %%
 stay_minutes = episodes.loc[episodes["episode_type"] == "STAY", "duration_s"] / 60.0
@@ -484,7 +648,7 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 9. STAY anchors
+# ## 11. STAY anchors
 
 # %%
 stays = episodes[episodes["episode_type"] == "STAY"].copy()
@@ -508,7 +672,54 @@ m_stays.save("stays_map.html")
 m_stays
 
 # %% [markdown]
-# ## 10. Episode-type breakdown
+# ## 12. Episode dual gate — what the radius check catches
+#
+# The episode detector applies two qualification gates: a time gate
+# (`duration ≥ min_stay_s`) and a space gate (`max observed radius from
+# anchor ≤ R_m`). A centroid-only check would let a spatially extended
+# single-segment `MOVE` qualify as its own "stay" — its centroid is one
+# point ≤ R from itself. The space gate rejects those.
+#
+# Below: how many single segments in this slice would have qualified
+# under a centroid-only rule but get rejected by the endpoint-reach
+# check.
+
+# %%
+def _endpoint_reach(row: pd.Series) -> float:
+    cl = (float(row["start_lat"]) + float(row["end_lat"])) / 2.0
+    cn = (float(row["start_lon"]) + float(row["end_lon"])) / 2.0
+    R = 6_371_000.0
+    p1, p2 = np.radians(cl), np.radians([row["start_lat"], row["end_lat"]])
+    dphi = np.radians([row["start_lat"] - cl, row["end_lat"] - cl])
+    dlmb = np.radians([row["start_lon"] - cn, row["end_lon"] - cn])
+    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlmb / 2) ** 2
+    return float(np.max(2 * R * np.arcsin(np.sqrt(a))))
+
+
+_rejected = segments[
+    (segments["duration_s"] >= EP_PARAMS.min_stay_s)
+    & segments.apply(lambda r: _endpoint_reach(r) > EP_PARAMS.R_m, axis=1)
+].copy()
+print(
+    f"Single segments that pass duration_s ≥ {EP_PARAMS.min_stay_s:.0f} but fail "
+    f"endpoint reach ≤ {EP_PARAMS.R_m:.0f} m: {len(_rejected)}\n"
+)
+if len(_rejected) > 0:
+    _rejected = _rejected.sort_values("duration_s", ascending=False)
+    _cols = ["segment_id", "segment_type", "duration_s",
+             "path_length_m", "displacement_m", "n_pings"]
+    print(_rejected[_cols].head(8).round(1).to_string(index=False))
+    print(
+        "\nEach of these would have anchored a spurious single-segment stay "
+        "under a centroid-only rule. The endpoint-reach gate rejects them."
+    )
+else:
+    print("None found in this slice — the gate didn't reject anything here. "
+          "Still useful: tells us this user's traces don't produce endpoint-"
+          "stretched candidates at these thresholds.")
+
+# %% [markdown]
+# ## 13. Episode-type breakdown
 
 # %%
 ep_type_counts = episodes["episode_type"].value_counts()
@@ -528,7 +739,7 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 11. Anatomy of one episode
+# ## 14. Anatomy of one episode
 #
 # One TRANSIT with its constituent segments coloured individually —
 # the segment boundaries inside a single journey become visible.
@@ -619,7 +830,7 @@ m_one_ep
 # lights) or `MOVE_BRIEF` chunks (parking-lot manoeuvring).
 
 # %% [markdown]
-# ## 12. TRANSIT map
+# ## 15. TRANSIT map
 #
 # All TRANSIT episodes drawn as their constituent segments' actual paths
 # — i.e., just the journeys.
@@ -636,7 +847,7 @@ m_transits.save("transits_map.html")
 m_transits
 
 # %% [markdown]
-# ## 13. Episode similarity — *"find me trips like this trip"*
+# ## 16. Episode similarity — *"find me trips like this trip"*
 #
 # `embed_segments` produces one vector per segment. Episode-level
 # pooling is a user-side choice; here we concat
@@ -649,7 +860,11 @@ m_transits
 
 # %%
 def _pool_episode(seg_vec_subset: np.ndarray, ep_row: pd.Series) -> np.ndarray:
-    """3·D + 2 episode-level scalars; L2-normalised."""
+    """3·D + 2 episode-level scalars; L2-normalised.
+
+    A deliberately minimal pool. Richer schemes (per-type one-hots,
+    path-length scalars, learned projections) are user-side decisions.
+    """
     if len(seg_vec_subset) == 0:
         return np.zeros(seg_vec_subset.shape[1] * 3 + 2, dtype=np.float32)
     mean = seg_vec_subset.mean(axis=0)
@@ -681,11 +896,14 @@ for _, ep_row in episodes.iterrows():
 ep_vectors = np.vstack(_pooled_rows).astype(np.float32)
 ep_ids = _pooled_ids
 
-transit_episodes = episodes[episodes["episode_type"] == "TRANSIT"].sort_values(
-    "duration_s"
-)
+# Pick a query programmatically: the median-duration TRANSIT with at least 3
+# constituent segments. Hard-coded IDs are brittle across parameter changes.
+m_ep_sim = None
+transit_episodes = episodes[
+    (episodes["episode_type"] == "TRANSIT") & (episodes["n_segments"] >= 3)
+].sort_values("duration_s").reset_index(drop=True)
 if len(transit_episodes) > 0:
-    query_ep_id = "ep_000_00036"
+    query_ep_id = str(transit_episodes.iloc[len(transit_episodes) // 2]["episode_id"])
     query_idx = ep_ids.index(query_ep_id)
     ep_index = build_index(ep_vectors, ep_ids, metric="cosine")
     ep_hits = search(ep_index, ep_vectors[query_idx], k=6)
@@ -731,14 +949,89 @@ if len(transit_episodes) > 0:
             )
     m_ep_sim.save("episode_similarity_map.html")
 else:
-    print("No TRANSIT episodes — episode similarity demo skipped.")
+    print("No multi-segment TRANSIT episodes in this slice — similarity demo skipped.")
 
-m_ep_sim if len(transit_episodes) > 0 else None
+m_ep_sim
 
 # %% [markdown]
 # Behaviourally similar hits (similar duration + path length + n_segments)
 # that are geographically scattered are the signal we want — the embedding
 # captured *what* not *where*.
+
+# %% [markdown]
+# ## 17. Embedding sanity — PCA of segment vectors
+#
+# If the 32-d segment vectors carry meaningful type information, the
+# four classes should at least partially separate in 2-D. The PCA below
+# is a quick sanity check; clean separation would say the recipe is
+# doing real work, total overlap would say it's mostly noise.
+
+# %%
+from sklearn.decomposition import PCA  # noqa: E402
+
+_pca = PCA(n_components=2)
+_xy = _pca.fit_transform(seg_vectors)
+_types_arr = segments.set_index("segment_id").loc[seg_ids]["segment_type"].to_numpy()
+
+fig, ax = plt.subplots(figsize=(8, 6))
+for _t, _c in COLOUR.items():
+    _m = _types_arr == _t
+    if not _m.any():
+        continue
+    ax.scatter(_xy[_m, 0], _xy[_m, 1], s=18, alpha=0.55, c=_c,
+               label=f"{_t} (n={int(_m.sum())})", edgecolors="none")
+ax.set_xlabel(f"PC1 ({_pca.explained_variance_ratio_[0] * 100:.1f}%)")
+ax.set_ylabel(f"PC2 ({_pca.explained_variance_ratio_[1] * 100:.1f}%)")
+ax.set_title("Segment vectors in 2-D PCA — coloured by segment_type")
+ax.legend(loc="best", fontsize=9)
+ax.grid(True, alpha=0.2)
+plt.tight_layout(); plt.show()
+print(f"PC1+PC2 explained variance: "
+      f"{_pca.explained_variance_ratio_.sum() * 100:.1f}%")
+
+# %% [markdown]
+# ## 18. Honest failure modes
+#
+# Where this run looks weak. Each line below is a concrete calibration
+# lead, not a flaw in the algorithm.
+
+# %%
+LONG_MOVE_S = 30 * 60  # 30 minutes
+_long_moves = segments[
+    (segments["segment_type"] == "MOVE") & (segments["duration_s"] > LONG_MOVE_S)
+]
+print(f"[a] MOVE segments longer than {LONG_MOVE_S // 60:.0f} min: {len(_long_moves)}")
+if len(_long_moves) > 0:
+    print(_long_moves.sort_values("duration_s", ascending=False)[
+        ["segment_id", "duration_s", "path_length_m", "n_pings"]
+    ].head(5).round(1).to_string(index=False))
+    print("  (calibration lead: bearing windows may be too short for sustained-turn scale)")
+
+_stays_in_eps = episodes[episodes["episode_type"] == "STAY"]
+_loose = _stays_in_eps[_stays_in_eps["envelope_radius_m"] >= 0.9 * EP_PARAMS.R_m]
+print(f"\n[b] STAYs with envelope_radius ≥ 0.9 × R_m: {len(_loose)} of {len(_stays_in_eps)}")
+if len(_loose) > 0:
+    print(_loose[["episode_id", "duration_s", "envelope_radius_m", "n_segments"]]
+          .head(5).round(1).to_string(index=False))
+    print("  (calibration lead: stays at the envelope edge — bigger R merges places, smaller splits them)")
+
+_n_dwell = int((segments["segment_type"] == "STOP_DWELL").sum())
+_n_brief = int((segments["segment_type"] == "STOP_BRIEF").sum())
+_dwell_share = _n_dwell / max(_n_dwell + _n_brief, 1)
+print(
+    f"\n[c] STOP_DWELL count = {_n_dwell}; STOP_BRIEF count = {_n_brief}; "
+    f"STOP_DWELL share of STOP_* = {100 * _dwell_share:.1f}%"
+)
+if _dwell_share < 0.20:
+    print(
+        f"  (calibration lead: dwell_threshold_min = {SEG_PARAMS.dwell_threshold_min} "
+        "may be too high for walking-cadence dwell durations.)"
+    )
+
+_drift_rate = (cleaned_per_ping["quality_flag"] == "DRIFT").mean()
+print(f"\n[d] DRIFT flag rate: {100 * _drift_rate:.1f}% of all pings")
+if _drift_rate > 0.10:
+    print("  (calibration lead: thresholds at 50 m / 1 km/h may flag genuine GPS jitter; retune for this cadence)")
 
 # %% [markdown]
 # ## Closing
