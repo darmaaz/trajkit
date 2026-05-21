@@ -23,10 +23,7 @@ from trajkit.segment import SegmentParams, aggregate_segments, segment
 # Walking-scale calibration: tighter envelope (R=30m) and shorter
 # transit-grace (T=120s) than the module defaults.
 PEDESTRIAN_SEGMENT = SegmentParams(
-    stop_speed_kmh=1.0,
-    resume_speed_kmh=3.0,
-    max_stop_displacement_m=50.0,
-    dwell_threshold_min=3.0,
+    stop_speed_kmh=1.0, resume_speed_kmh=3.0, max_stop_displacement_m=50.0
 )
 PEDESTRIAN_EPISODE = EpisodeParams(R_m=30.0, T_s=120.0, min_stay_s=120.0)
 PEDESTRIAN_EMBED = EmbedParams(spatial_bounds=(39.95, 40.02, 116.28, 116.36))
