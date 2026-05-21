@@ -65,3 +65,5 @@ uv.lock
 # Generated example artifacts (regenerable from source notebooks / scripts)
 examples/geolife/*.html
 examples/geolife/_explore_source.ipynb
+examples/geolife/explore.py
+**/.ipynb_checkpoints/
