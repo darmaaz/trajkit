@@ -497,21 +497,82 @@ m_one_seg
 # %% [markdown]
 # ## 9. A bearing-driven boundary
 #
-# Programmatically pick a pair of consecutive `MOVE` segments joined at
-# one ping interval with no `GAP_FOLLOWS` flag. Neither the state-change
-# detector nor the gap detector could have fired here — the only thing
-# that could have split them is the bearing detector. The map shows the
-# transition; the R plot below shows the circular-concentration curves
-# (short and long windows) plunging through the entry threshold at the
-# boundary.
+# Walkthrough of the most novel piece of the pipeline. The bearing
+# detector splits a long `MOVE` where its direction changes
+# sustainedly, even if speed never crosses the stop threshold and no
+# gap is observed.
+#
+# We do this in three steps:
+#
+# 1. The intuition: what `R` (mean resultant length) actually measures.
+# 2. A real boundary on the map, picked programmatically.
+# 3. The bearings and R curves at that boundary, with coloured markers
+#    that match the map dots so you can trace any point on the plot
+#    back to a physical location.
+
+# %% [markdown]
+# ### 9a. The intuition — what is R?
+#
+# For a window of bearings, take each bearing as a unit vector on the
+# circle and average them. The length of that **mean unit-vector** is
+# `R ∈ [0, 1]`:
+#
+# * If the bearings are clustered (heading stable), the unit vectors
+#   add constructively and the mean has length close to 1.
+# * If the bearings are spread (heading changing), the unit vectors
+#   cancel out and the mean is close to zero.
+#
+# `R` is the circular-statistics-correct way to ask "how concentrated
+# are these bearings?", which side-steps the wraparound that ordinary
+# arithmetic averages run into at 0°/360°.
+
+# %%
+_rng = np.random.default_rng(0)
+fig_i, (ax_lo, ax_hi) = plt.subplots(1, 2, figsize=(9, 4.5),
+                                     subplot_kw={"aspect": "equal"})
+for _ax in (ax_lo, ax_hi):
+    _ax.add_patch(plt.Circle((0, 0), 1.0, fill=False, color="#888", lw=1))
+    _ax.set_xlim(-1.3, 1.3); _ax.set_ylim(-1.3, 1.3)
+    _ax.axhline(0, color="#ddd", lw=0.5, zorder=0)
+    _ax.axvline(0, color="#ddd", lw=0.5, zorder=0)
+    _ax.set_xticks([]); _ax.set_yticks([])
+
+_angles_lo = np.deg2rad(60 + _rng.normal(0, 7, size=20))
+for _a in _angles_lo:
+    ax_lo.arrow(0, 0, 0.9 * np.cos(_a), 0.9 * np.sin(_a),
+                head_width=0.05, head_length=0.06, color="#1f77b4", alpha=0.55,
+                length_includes_head=True)
+_mean_lo = np.array([np.cos(_angles_lo).mean(), np.sin(_angles_lo).mean()])
+_r_lo = float(np.linalg.norm(_mean_lo))
+ax_lo.arrow(0, 0, _mean_lo[0], _mean_lo[1], head_width=0.08, head_length=0.08,
+            color="#d62728", lw=2, length_includes_head=True, zorder=5)
+ax_lo.set_title(f"Bearings clustered  →  R = {_r_lo:.2f}\n(heading stable)")
+
+_angles_hi = np.deg2rad(_rng.uniform(0, 360, size=20))
+for _a in _angles_hi:
+    ax_hi.arrow(0, 0, 0.9 * np.cos(_a), 0.9 * np.sin(_a),
+                head_width=0.05, head_length=0.06, color="#1f77b4", alpha=0.55,
+                length_includes_head=True)
+_mean_hi = np.array([np.cos(_angles_hi).mean(), np.sin(_angles_hi).mean()])
+_r_hi = float(np.linalg.norm(_mean_hi))
+ax_hi.arrow(0, 0, _mean_hi[0], _mean_hi[1], head_width=0.08, head_length=0.08,
+            color="#d62728", lw=2, length_includes_head=True, zorder=5)
+ax_hi.set_title(f"Bearings spread  →  R = {_r_hi:.2f}\n(heading changing)")
+fig_i.suptitle("R = length of the mean unit-vector (red arrow)", fontsize=11, y=1.02)
+plt.tight_layout(); plt.show()
+
+# %% [markdown]
+# ### 9b. Find a real boundary
+#
+# Walk adjacent segment pairs. A *pure* bearing-driven boundary is one
+# where both segments are `MOVE`, joined at a single ping interval,
+# and the join ping isn't `GAP_FOLLOWS`. That rules out state-change
+# and gap as the cause — only the bearing detector could have split
+# the segments.
 
 # %%
 from trajkit.segment._segment import _circular_r_over_distance  # noqa: E402
 
-# Find a real MOVE → MOVE boundary: adjacent same-segment-type segments,
-# joined at one ping interval, where the join ping is NOT GAP_FOLLOWS.
-# That means neither the state-change nor the gap detector fired — the
-# only thing that could have split them is the bearing detector.
 sorted_segs = segments.sort_values("start_ts").reset_index(drop=True)
 ctx_pings_before = 30
 ctx_pings_after = 120
@@ -536,105 +597,265 @@ if best is None:
 
 TARGET_SEG = best["next_id"]
 prev_seg_id = best["prev_id"]
-prev_seg_type = "MOVE"
-target_mask = per_ping_segmented["segment_id"] == TARGET_SEG
 target_idx0 = best["b_first_idx"]
-target_idx_last = int(per_ping_segmented.index[target_mask].max())
+target_idx_last = int(per_ping_segmented.index[
+    per_ping_segmented["segment_id"] == TARGET_SEG
+].max())
 target_meta = segments.loc[segments["segment_id"] == TARGET_SEG].iloc[0]
 
-# Two scopes:
-#   map_slice — full target segment + context tail of the previous segment,
-#               so the visual extent matches what's drawn on the section 6 map.
-#   r_slice   — narrow window around the boundary, so the R curve isn't
-#               diluted by averaging over the whole segment.
-map_slice = per_ping_segmented.iloc[
-    max(0, target_idx0 - ctx_pings_before) : target_idx_last + 1
-].reset_index(drop=True)
+# Narrow slice around the boundary — wide enough to see motion on either side
+# but not so wide that long-window R averages over uninteresting territory.
 r_slice = per_ping_segmented.iloc[
     max(0, target_idx0 - ctx_pings_before) : target_idx0 + ctx_pings_after
 ].reset_index(drop=True)
+boundary_local = int(r_slice.index[r_slice["segment_id"] == TARGET_SEG].min())
 
-print(
-    f"Boundary: end of {prev_seg_id} ({prev_seg_type}) → "
-    f"start of {TARGET_SEG} ({target_meta['segment_type']})"
+print(f"Boundary: {prev_seg_id} (MOVE) → {TARGET_SEG} (MOVE)")
+print(f"  target segment: {int(target_meta['n_pings'])} pings, "
+      f"{float(target_meta['duration_s']):.0f}s, "
+      f"path={float(target_meta['path_length_m']):.0f} m")
+
+# Compute the R curves and the cumulative-distance axis.
+moving = r_slice["segment_type"].str.startswith("MOVE").to_numpy()
+bearing_arr = r_slice["bearing_deg"].to_numpy(dtype=float)
+valid_b = moving & ~np.isnan(bearing_arr)
+disp = r_slice["displacement_m"].fillna(0.0).to_numpy(dtype=float)
+cum_dist = np.cumsum(np.where(moving, disp, 0.0))
+boundary_dist = float(cum_dist[boundary_local])
+r_short = _circular_r_over_distance(
+    cum_dist, bearing_arr, valid_b,
+    SEG_PARAMS.bearing_window_short_m, SEG_PARAMS.bearing_window_min_pings,
 )
-print(
-    f"  target segment: {int(target_meta['n_pings'])} pings, "
-    f"{float(target_meta['duration_s']):.0f}s, "
-    f"path={float(target_meta['path_length_m']):.0f}m"
+r_long = _circular_r_over_distance(
+    cum_dist, bearing_arr, valid_b,
+    SEG_PARAMS.bearing_window_long_m, SEG_PARAMS.bearing_window_min_pings,
 )
 
-# Map: the full target segment + tail of the previous segment.
-seg_center_lat = float(map_slice["lat"].astype(float).mean())
-seg_center_lon = float(map_slice["lon"].astype(float).mean())
+# Sample N evenly spaced pings as colour anchors. The same colours appear
+# on both the map below and the plot in 9c, so any dot can be traced
+# from one to the other.
+from matplotlib.cm import viridis  # noqa: E402
+N_MARKERS = 12
+sample_idx = np.linspace(0, len(r_slice) - 1, N_MARKERS).astype(int)
+sample_colours = viridis(np.linspace(0.05, 0.95, N_MARKERS))
+
+
+def _rgb_hex(rgb: np.ndarray) -> str:
+    r, g, b = (int(rgb[i] * 255) for i in range(3))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+# %% [markdown]
+# ### Map of the boundary
+#
+# The polylines show the two `MOVE` segments either side of the boundary
+# coloured by `segment_type`. The numbered coloured dots are evenly
+# spaced sample pings — the same colours appear on the bearing and R
+# curves in 9c, so you can point at any dot on the map and find it on
+# the plot.
+
+# %%
+seg_center_lat = float(r_slice["lat"].astype(float).mean())
+seg_center_lon = float(r_slice["lon"].astype(float).mean())
 m_seg_bearing = folium.Map(
-    location=[seg_center_lat, seg_center_lon], zoom_start=12, tiles="cartodbpositron"
+    location=[seg_center_lat, seg_center_lon], zoom_start=13, tiles="cartodbpositron"
 )
-for sid, group in map_slice.groupby("segment_id", sort=False):
+for sid, group in r_slice.groupby("segment_id", sort=False):
     if len(group) < 2:
         continue
     seg_type = str(group["segment_type"].iloc[0])
     folium.PolyLine(
-        locations=list(zip(group["lat"].astype(float), group["lon"].astype(float), strict=True)),
+        locations=list(zip(group["lat"].astype(float),
+                           group["lon"].astype(float), strict=True)),
         color=COLOUR.get(seg_type, "#888888"),
-        weight=4 if seg_type.startswith("MOVE") else 6,
-        opacity=0.8,
-        tooltip=f"{sid} • {seg_type} • {len(group)} pings",
+        weight=4, opacity=0.55,
+        tooltip=f"{sid} ({seg_type})",
     ).add_to(m_seg_bearing)
-boundary_lat = float(map_slice.loc[map_slice["segment_id"] == TARGET_SEG, "lat"].iloc[0])
-boundary_lon = float(map_slice.loc[map_slice["segment_id"] == TARGET_SEG, "lon"].iloc[0])
+for _k, _idx in enumerate(sample_idx):
+    _r = r_slice.iloc[int(_idx)]
+    folium.CircleMarker(
+        location=[float(_r["lat"]), float(_r["lon"])],
+        radius=8,
+        color=_rgb_hex(sample_colours[_k]),
+        fill=True, fill_opacity=0.95, weight=2,
+        tooltip=f"k={_k}  cum_dist={cum_dist[_idx]:.0f} m  "
+                f"bearing={bearing_arr[_idx]:.0f}°",
+    ).add_to(m_seg_bearing)
+_b_row = r_slice.iloc[boundary_local]
 folium.CircleMarker(
-    location=[boundary_lat, boundary_lon],
-    radius=7, color="black", fill=True, fill_opacity=0.9,
+    location=[float(_b_row["lat"]), float(_b_row["lon"])],
+    radius=10, color="black", fill=True, fill_opacity=0.9, weight=2,
     tooltip=f"boundary: first ping of {TARGET_SEG}",
 ).add_to(m_seg_bearing)
 m_seg_bearing.get_root().html.add_child(folium.Element(legend_html))
 m_seg_bearing.save("segment_bearing_anatomy.html")
 m_seg_bearing
 
-# %%
-# R curves: narrow window around the boundary only.
-moving = r_slice["segment_type"].str.startswith("MOVE").to_numpy()
-bearing_arr = r_slice["bearing_deg"].to_numpy(dtype=float)
-valid_b = moving & ~np.isnan(bearing_arr)
-disp = r_slice["displacement_m"].fillna(0.0).to_numpy(dtype=float)
-disp_motion = np.where(moving, disp, 0.0)
-cum_dist_ctx = np.cumsum(disp_motion)
-r_short = _circular_r_over_distance(
-    cum_dist_ctx, bearing_arr, valid_b,
-    SEG_PARAMS.bearing_window_short_m, SEG_PARAMS.bearing_window_min_pings,
-)
-r_long = _circular_r_over_distance(
-    cum_dist_ctx, bearing_arr, valid_b,
-    SEG_PARAMS.bearing_window_long_m, SEG_PARAMS.bearing_window_min_pings,
-)
-boundary_local = int(r_slice.index[r_slice["segment_id"] == TARGET_SEG].min())
-boundary_dist = float(cum_dist_ctx[boundary_local])
+# %% [markdown]
+# ### 9c. The bearings and R, side by side
+#
+# **Top panel**: raw bearings (degrees, vs distance along the
+# trajectory). Heading stays clustered in one direction, then rotates
+# through the boundary, then clusters in a new direction. Wraparound at
+# 360° → 0° is normal and is precisely what the circular-statistics
+# treatment avoids.
+#
+# **Bottom panel**: the same R curves the detector sees. Both windows
+# (short 75 m, long 200 m) sit close to 1.0 while heading is stable,
+# then dive sharply through `r_enter` at the boundary. The boundary
+# itself (vertical dotted line) lines up with where the bearings start
+# rotating.
+#
+# Coloured dots correspond to the map markers.
 
-fig, ax_r = plt.subplots(1, 1, figsize=(11, 4))
-ax_r.plot(cum_dist_ctx, r_short, label=f"R (short {SEG_PARAMS.bearing_window_short_m:.0f} m)", color="#1f77b4")
-ax_r.plot(cum_dist_ctx, r_long, label=f"R (long {SEG_PARAMS.bearing_window_long_m:.0f} m)", color="#ff7f0e")
+# %%
+fig, (ax_b, ax_r) = plt.subplots(2, 1, figsize=(11, 6.5), sharex=True,
+                                 gridspec_kw={"height_ratios": [1.0, 1.2]})
+
+ax_b.plot(cum_dist[valid_b], bearing_arr[valid_b],
+          color="#666", lw=1, alpha=0.7, marker="o", ms=2,
+          label="bearing (deg)")
+ax_b.axvline(boundary_dist, color="black", ls=":", alpha=0.7, lw=1.5,
+             label=f"boundary @ {boundary_dist:.0f} m")
+ax_b.set_ylabel("bearing_deg (°)")
+ax_b.set_ylim(0, 360); ax_b.set_yticks([0, 90, 180, 270, 360])
+ax_b.grid(True, alpha=0.2)
+ax_b.legend(fontsize=9, loc="upper left")
+ax_b.set_title("Raw bearings rotate through the boundary; R drops in response below")
+
+ax_r.plot(cum_dist, r_short,
+          label=f"R (short {SEG_PARAMS.bearing_window_short_m:.0f} m)",
+          color="#1f77b4", lw=1.5)
+ax_r.plot(cum_dist, r_long,
+          label=f"R (long {SEG_PARAMS.bearing_window_long_m:.0f} m)",
+          color="#ff7f0e", lw=1.5)
 ax_r.axhline(SEG_PARAMS.bearing_r_enter, ls="--", color="red", alpha=0.6, lw=1)
 ax_r.axhline(SEG_PARAMS.bearing_r_exit, ls="--", color="green", alpha=0.6, lw=1)
-ax_r.text(cum_dist_ctx[-1], SEG_PARAMS.bearing_r_enter, " r_enter", color="red", va="center", fontsize=9)
-ax_r.text(cum_dist_ctx[-1], SEG_PARAMS.bearing_r_exit, " r_exit", color="green", va="center", fontsize=9)
-ax_r.axvline(boundary_dist, color="black", ls=":", alpha=0.7, label=f"boundary @ {boundary_dist:.0f} m")
+ax_r.text(cum_dist[-1], SEG_PARAMS.bearing_r_enter,
+          f" r_enter ({SEG_PARAMS.bearing_r_enter:.2f})",
+          color="red", va="center", fontsize=9)
+ax_r.text(cum_dist[-1], SEG_PARAMS.bearing_r_exit,
+          f" r_exit ({SEG_PARAMS.bearing_r_exit:.2f})",
+          color="green", va="center", fontsize=9)
+ax_r.axvline(boundary_dist, color="black", ls=":", alpha=0.7, lw=1.5)
 ax_r.set_xlabel("cumulative motion distance (m)")
-ax_r.set_ylabel("R (circular concentration)")
+ax_r.set_ylabel("R")
 ax_r.set_ylim(0, 1.05)
-ax_r.set_title(f"R curves around the start of {TARGET_SEG}")
+ax_r.grid(True, alpha=0.2)
 ax_r.legend(fontsize=9, loc="lower right")
+
+# Coloured anchor markers on both panels — matched to the map
+for _k, _idx in enumerate(sample_idx):
+    _cd = cum_dist[_idx]
+    _bd = bearing_arr[_idx]
+    if not np.isnan(_bd):
+        ax_b.scatter(_cd, _bd, s=80, color=sample_colours[_k],
+                     edgecolor="black", linewidth=1.0, zorder=10)
+    _rs = r_short[_idx]
+    if np.isnan(_rs):
+        _rs = r_long[_idx]
+    if not np.isnan(_rs):
+        ax_r.scatter(_cd, _rs, s=80, color=sample_colours[_k],
+                     edgecolor="black", linewidth=1.0, zorder=10)
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# R drops sharply at the boundary because the windows straddle a heading
-# change: bearings on either side point in different directions, and the
-# vector-mean registers them as spread out. A purely-bearing boundary
-# (MOVE → MOVE with no stop in between) looks the same in R, just
-# without the coincident state-change vote.
+# **Reading guide.** Walk the colours from purple to yellow along the
+# trajectory. Before the boundary, bearings hold a roughly steady
+# direction and both R curves sit near 1.0. At the boundary, bearings
+# rotate sharply — and the short window (75 m, blue) plunges *first*
+# because the bearing spread is concentrated in a smaller distance
+# range. The long window (200 m, orange) follows with a delayed,
+# broader dip. After the boundary, bearings re-cluster around the new
+# direction and both R curves climb back through `r_exit` (0.92).
+# *Multi-scale* is the point — the short window catches sharp corners
+# the long window would smear over; the long window catches arterial
+# sweeps the short one would miss.
 
 # %% [markdown]
-# ## 10. Stay duration distribution
+# ## 10. Segment similarity — *"find me segments like this one"*
+#
+# A direct demo of the library's primitive embedding. Build a FAISS
+# index over the per-segment vectors, pick a representative `MOVE`
+# segment programmatically, fetch the top-5 nearest neighbours by
+# cosine similarity. If the embedding captures behaviour shape, hits
+# should match on duration / path-length / straightness — and can land
+# anywhere geographically. That's "find me a walk like this one,"
+# regardless of where it happened.
+
+# %%
+_moves_for_query = segments[
+    (segments["segment_type"] == "MOVE")
+    & (segments["n_pings"] >= 20)
+    & (segments["path_length_m"] >= 200)
+].copy()
+_median_dur = _moves_for_query["duration_s"].median()
+_moves_for_query["__dur_dist"] = (
+    _moves_for_query["duration_s"] - _median_dur
+).abs()
+_query_seg_id = str(
+    _moves_for_query.sort_values("__dur_dist").iloc[0]["segment_id"]
+)
+
+_seg_index = build_index(seg_vectors, seg_ids, metric="cosine")
+_q_idx = seg_ids.index(_query_seg_id)
+_seg_hits = search(_seg_index, seg_vectors[_q_idx], k=6)
+
+_seg_hit_rows = []
+for _h in _seg_hits:
+    _s = segments.loc[segments["segment_id"] == _h.id].iloc[0]
+    _seg_hit_rows.append({
+        "rank": _h.rank,
+        "segment_id": _h.id,
+        "score": round(_h.score, 4),
+        "type": _s["segment_type"],
+        "duration_s": float(_s["duration_s"]),
+        "path_m": float(_s["path_length_m"]),
+        "straight": round(float(_s["straightness"]), 2),
+    })
+seg_hits_table = pd.DataFrame(_seg_hit_rows)
+print(f"query: {_query_seg_id}")
+print(seg_hits_table.to_string(index=False))
+
+# Map: query in black, hits coloured by rank
+_RANK_COLOURS = ["#000000", "#d62728", "#ff7f0e", "#2ca02c", "#1f77b4", "#9467bd"]
+_q_pings = per_ping_segmented[per_ping_segmented["segment_id"] == _query_seg_id]
+_center_lat = float(_q_pings["lat"].astype(float).mean())
+_center_lon = float(_q_pings["lon"].astype(float).mean())
+m_seg_sim = folium.Map(
+    location=[_center_lat, _center_lon], zoom_start=11,
+    tiles="cartodbpositron",
+)
+for _, _row in seg_hits_table.iterrows():
+    _sid = _row["segment_id"]
+    _sp = per_ping_segmented[per_ping_segmented["segment_id"] == _sid]
+    if len(_sp) < 2:
+        continue
+    _is_query = _row["rank"] == 0
+    folium.PolyLine(
+        locations=list(zip(_sp["lat"].astype(float),
+                           _sp["lon"].astype(float), strict=True)),
+        color=("#000000" if _is_query
+               else _RANK_COLOURS[int(_row["rank"])]),
+        weight=6 if _is_query else 4,
+        opacity=0.95 if _is_query else 0.75,
+        tooltip=(
+            f"rank={int(_row['rank'])} score={_row['score']:.4f} "
+            f"{_sid} ({_row['type']}) "
+            f"{_row['duration_s']:.0f}s / {_row['path_m']:.0f}m / "
+            f"straight={_row['straight']:.2f}"
+        ),
+    ).add_to(m_seg_sim)
+m_seg_sim.save("segment_similarity_map.html")
+m_seg_sim
+
+# %% [markdown]
+# Hits should be of comparable duration, path length, and straightness
+# to the query, and scattered geographically. That's the embedding
+# capturing *what* the segment was, not *where* it happened.
+
+# %% [markdown]
+# ## 11. Stay duration distribution
 
 # %%
 stay_minutes = episodes.loc[episodes["episode_type"] == "STAY", "duration_s"] / 60.0
@@ -648,7 +869,7 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 11. STAY anchors
+# ## 12. STAY anchors
 
 # %%
 stays = episodes[episodes["episode_type"] == "STAY"].copy()
@@ -672,7 +893,7 @@ m_stays.save("stays_map.html")
 m_stays
 
 # %% [markdown]
-# ## 12. Episode dual gate — what the radius check catches
+# ## 13. Episode dual gate — what the radius check catches
 #
 # The episode detector applies two qualification gates: a time gate
 # (`duration ≥ min_stay_s`) and a space gate (`max observed radius from
@@ -719,7 +940,7 @@ else:
           "stretched candidates at these thresholds.")
 
 # %% [markdown]
-# ## 13. Episode-type breakdown
+# ## 14. Episode-type breakdown
 
 # %%
 ep_type_counts = episodes["episode_type"].value_counts()
@@ -739,7 +960,7 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 14. Anatomy of one episode
+# ## 15. Anatomy of one TRANSIT episode
 #
 # One TRANSIT with its constituent segments coloured individually —
 # the segment boundaries inside a single journey become visible.
@@ -830,24 +1051,101 @@ m_one_ep
 # lights) or `MOVE_BRIEF` chunks (parking-lot manoeuvring).
 
 # %% [markdown]
-# ## 15. TRANSIT map
+# ## 16. Anatomy of one STAY episode — the running-anchor rule in action
 #
-# All TRANSIT episodes drawn as their constituent segments' actual paths
-# — i.e., just the journeys.
+# Pick a STAY with several constituent segments. Reconstruct the
+# running anchor at each acceptance step (the mean of the centroids of
+# all accepted-so-far segments) and overlay them on the map. The
+# anchor wanders early when only one or two segments have been
+# absorbed; as more come in, it settles. The final anchor is the
+# canonical STAY location reported by `detect_episodes`. The red
+# circle is the `R_m` envelope around that anchor — every constituent
+# segment's endpoints sat inside it.
 
 # %%
-m_transits = folium.Map(
-    location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
-)
-transits = episodes[episodes["episode_type"] == "TRANSIT"]
-for _, ep in transits.iterrows():
-    _episode_path_polyline(m_transits, ep, rank=0, is_query=False)
-m_transits.get_root().html.add_child(folium.Element(legend_html))
-m_transits.save("transits_map.html")
-m_transits
+_stays_multi = episodes[
+    (episodes["episode_type"] == "STAY") & (episodes["n_segments"] >= 4)
+].sort_values("n_segments", ascending=False)
+m_stay_anat: folium.Map | None = None
+if len(_stays_multi) > 0:
+    _stay = _stays_multi.iloc[0]
+    _const_ids = list(_stay["segment_ids"])
+    _const = segments.set_index("segment_id").loc[_const_ids].reset_index()
+    _const["__cent_lat"] = (_const["start_lat"] + _const["end_lat"]) / 2.0
+    _const["__cent_lon"] = (_const["start_lon"] + _const["end_lon"]) / 2.0
+    _running_lat: list[float] = []
+    _running_lon: list[float] = []
+    for _k in range(len(_const)):
+        _running_lat.append(float(_const["__cent_lat"].iloc[: _k + 1].mean()))
+        _running_lon.append(float(_const["__cent_lon"].iloc[: _k + 1].mean()))
+
+    print(
+        f"STAY {_stay['episode_id']}  n_segments={int(_stay['n_segments'])}  "
+        f"duration={float(_stay['duration_s']):.0f}s  "
+        f"envelope_radius_m={float(_stay['envelope_radius_m']):.1f}"
+    )
+
+    _n = len(_const)
+    _anchor_cols: list[str] = []
+    for _k in range(_n):
+        _t = _k / max(_n - 1, 1)
+        _r = int(255 * (0.25 + 0.6 * _t))
+        _g = int(255 * (0.0 + 0.85 * _t))
+        _b = int(255 * (0.55 - 0.45 * _t))
+        _anchor_cols.append(f"#{_r:02x}{_g:02x}{_b:02x}")
+
+    m_stay_anat = folium.Map(
+        location=[float(_stay["anchor_lat"]), float(_stay["anchor_lon"])],
+        zoom_start=18, tiles="cartodbpositron",
+    )
+    for _sid in _const_ids:
+        _sp = per_ping_segmented[per_ping_segmented["segment_id"] == _sid]
+        if len(_sp) < 2:
+            continue
+        _stype = str(segments.loc[segments["segment_id"] == _sid].iloc[0]["segment_type"])
+        folium.PolyLine(
+            locations=list(zip(_sp["lat"].astype(float),
+                               _sp["lon"].astype(float), strict=True)),
+            color=COLOUR.get(_stype, "#888"),
+            weight=3, opacity=0.55,
+            tooltip=f"{_sid} ({_stype})",
+        ).add_to(m_stay_anat)
+
+    for _k in range(_n):
+        folium.CircleMarker(
+            location=[_running_lat[_k], _running_lon[_k]],
+            radius=7, color=_anchor_cols[_k],
+            fill=True, fill_opacity=0.95, weight=2,
+            tooltip=(
+                f"step {_k}: anchor after accepting "
+                f"{_const['segment_id'].iloc[_k]}"
+            ),
+        ).add_to(m_stay_anat)
+
+    folium.Circle(
+        location=[float(_stay["anchor_lat"]), float(_stay["anchor_lon"])],
+        radius=EP_PARAMS.R_m,
+        color="#d62728", weight=2, fill=False,
+        tooltip=f"final envelope: R_m = {EP_PARAMS.R_m:.0f} m",
+    ).add_to(m_stay_anat)
+
+    m_stay_anat.get_root().html.add_child(folium.Element(legend_html))
+    m_stay_anat.save("stay_anatomy.html")
+else:
+    print("No STAY with ≥4 segments in this slice — anatomy demo skipped.")
+m_stay_anat
 
 # %% [markdown]
-# ## 16. Episode similarity — *"find me trips like this trip"*
+# Anchor dots progress purple → yellow as each new segment is accepted
+# into the envelope. Watch the early steps "wander" before settling —
+# that's the running mean adapting to where the entity actually was.
+# The final anchor (last yellow dot, which sits at the same lat/lon
+# `detect_episodes` reports) is at the centre of the red `R_m`
+# envelope, and by construction every constituent segment's endpoints
+# fit inside that circle.
+
+# %% [markdown]
+# ## 17. Episode similarity — *"find me trips like this trip"*
 #
 # `embed_segments` produces one vector per segment. Episode-level
 # pooling is a user-side choice; here we concat
@@ -860,21 +1158,31 @@ m_transits
 
 # %%
 def _pool_episode(seg_vec_subset: np.ndarray, ep_row: pd.Series) -> np.ndarray:
-    """3·D + 2 episode-level scalars; L2-normalised.
+    """3·D + 4 episode-level scalars; L2-normalised.
 
-    A deliberately minimal pool. Richer schemes (per-type one-hots,
-    path-length scalars, learned projections) are user-side decisions.
+    The episode-level scalars carry length/shape information that pure
+    segment-vector pooling washes out: total duration, total path
+    length, segment count, and a TRANSIT one-hot.
     """
     if len(seg_vec_subset) == 0:
-        return np.zeros(seg_vec_subset.shape[1] * 3 + 2, dtype=np.float32)
+        return np.zeros(seg_vec_subset.shape[1] * 3 + 4, dtype=np.float32)
     mean = seg_vec_subset.mean(axis=0)
     std = seg_vec_subset.std(axis=0)
     abs_argmax = np.abs(seg_vec_subset).argmax(axis=0)
     cols = np.arange(seg_vec_subset.shape[1])
     max_by_mag = seg_vec_subset[abs_argmax, cols]
+
+    raw_path = ep_row.get("path_length_m")
+    path_m = (
+        float(raw_path) if raw_path is not None and not pd.isna(raw_path) else 0.0
+    )
     scalars = np.array(
-        [np.log1p(max(float(ep_row["duration_s"]), 0.0)),
-         1.0 if ep_row["episode_type"] == "TRANSIT" else 0.0],
+        [
+            np.log1p(max(float(ep_row["duration_s"]), 0.0)),
+            np.log1p(max(path_m, 0.0)),
+            np.log1p(max(float(ep_row["n_segments"]), 0.0)),
+            1.0 if ep_row["episode_type"] == "TRANSIT" else 0.0,
+        ],
         dtype=np.float32,
     )
     v = np.concatenate([mean, std, max_by_mag, scalars]).astype(np.float32)
@@ -954,12 +1262,18 @@ else:
 m_ep_sim
 
 # %% [markdown]
-# Behaviourally similar hits (similar duration + path length + n_segments)
-# that are geographically scattered are the signal we want — the embedding
-# captured *what* not *where*.
+# Hits match the query on segment-mix and behavioural shape and land
+# geographically scattered — that's the signature an L2-normalised
+# cosine over per-segment vectors emphasises. Absolute size (total
+# path length, total duration) is included as scalar features but only
+# weakly tracked, since three episode-level scalars contribute ~3% of
+# a ~100-d vector under cosine. If you need length-prioritised
+# similarity, weight the scalars higher in your own pool or switch the
+# index to L2 — episode-level pooling is intentionally a user-side
+# decision.
 
 # %% [markdown]
-# ## 17. Embedding sanity — PCA of segment vectors
+# ## 18. Embedding sanity — PCA of segment vectors
 #
 # If the 32-d segment vectors carry meaningful type information, the
 # four classes should at least partially separate in 2-D. The PCA below
@@ -988,50 +1302,6 @@ ax.grid(True, alpha=0.2)
 plt.tight_layout(); plt.show()
 print(f"PC1+PC2 explained variance: "
       f"{_pca.explained_variance_ratio_.sum() * 100:.1f}%")
-
-# %% [markdown]
-# ## 18. Honest failure modes
-#
-# Where this run looks weak. Each line below is a concrete calibration
-# lead, not a flaw in the algorithm.
-
-# %%
-LONG_MOVE_S = 30 * 60  # 30 minutes
-_long_moves = segments[
-    (segments["segment_type"] == "MOVE") & (segments["duration_s"] > LONG_MOVE_S)
-]
-print(f"[a] MOVE segments longer than {LONG_MOVE_S // 60:.0f} min: {len(_long_moves)}")
-if len(_long_moves) > 0:
-    print(_long_moves.sort_values("duration_s", ascending=False)[
-        ["segment_id", "duration_s", "path_length_m", "n_pings"]
-    ].head(5).round(1).to_string(index=False))
-    print("  (calibration lead: bearing windows may be too short for sustained-turn scale)")
-
-_stays_in_eps = episodes[episodes["episode_type"] == "STAY"]
-_loose = _stays_in_eps[_stays_in_eps["envelope_radius_m"] >= 0.9 * EP_PARAMS.R_m]
-print(f"\n[b] STAYs with envelope_radius ≥ 0.9 × R_m: {len(_loose)} of {len(_stays_in_eps)}")
-if len(_loose) > 0:
-    print(_loose[["episode_id", "duration_s", "envelope_radius_m", "n_segments"]]
-          .head(5).round(1).to_string(index=False))
-    print("  (calibration lead: stays at the envelope edge — bigger R merges places, smaller splits them)")
-
-_n_dwell = int((segments["segment_type"] == "STOP_DWELL").sum())
-_n_brief = int((segments["segment_type"] == "STOP_BRIEF").sum())
-_dwell_share = _n_dwell / max(_n_dwell + _n_brief, 1)
-print(
-    f"\n[c] STOP_DWELL count = {_n_dwell}; STOP_BRIEF count = {_n_brief}; "
-    f"STOP_DWELL share of STOP_* = {100 * _dwell_share:.1f}%"
-)
-if _dwell_share < 0.20:
-    print(
-        f"  (calibration lead: dwell_threshold_min = {SEG_PARAMS.dwell_threshold_min} "
-        "may be too high for walking-cadence dwell durations.)"
-    )
-
-_drift_rate = (cleaned_per_ping["quality_flag"] == "DRIFT").mean()
-print(f"\n[d] DRIFT flag rate: {100 * _drift_rate:.1f}% of all pings")
-if _drift_rate > 0.10:
-    print("  (calibration lead: thresholds at 50 m / 1 km/h may flag genuine GPS jitter; retune for this cadence)")
 
 # %% [markdown]
 # ## Closing
