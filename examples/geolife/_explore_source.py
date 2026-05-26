@@ -1278,84 +1278,110 @@ m_ep_sim
 # decision.
 
 # %% [markdown]
-# ## 18. Does the shape block carry information?
+# ## 18. Does similarity actually retrieve same-kind segments?
 #
-# Sanity check on the design decision to add a shape block to the
-# segment vector. If the shape features are mostly redundant with what
-# kinematic / cyclic / segtype / spatial already encode, a PCA over
-# the with-shape vector should look the same as a PCA over the
-# without-shape vector. If shape adds independent signal, the
-# with-shape PCA's leading components should explain more of the
-# variance — shape concentrates information in axes the smaller
-# vector cannot see.
+# The closer is a quantitative check on whether the embedding does the
+# job `compare` advertises. For every segment in the corpus, take its
+# `k` nearest neighbours (excluding the query itself). Count how many
+# share the query's `segment_type`. Average across all segments.
+#
+# Two baselines to compare against:
+#
+# * **Uniform random** — 25%, the rate you'd see if there were four
+#   equally common types and neighbours were drawn at random.
+# * **Proportional random** — `Σ p_i²` over the corpus's actual type
+#   shares. This is the right baseline for an unbalanced corpus: even
+#   random neighbours hit the same type more than 25% of the time when
+#   the corpus is skewed.
 
 # %%
-from sklearn.decomposition import PCA  # noqa: E402
-from trajkit.embed._params import SHAPE_DIM  # noqa: E402
-
-
-# Rebuild the without-shape variant: take the unnormalised recipe
-# output, strip the trailing shape dims, then L2-normalise. That is
-# the vector the recipe would have produced if shape weren't part of
-# the recipe.
-_unnorm, _ = embed_segments(
-    segments,
-    EmbedParams(spatial_bounds=EMBED_PARAMS.spatial_bounds, l2_normalize=False),
+_K = 10
+_types_arr = (
+    segments.set_index("segment_id")
+    .loc[seg_ids]["segment_type"]
+    .to_numpy()
 )
-_no_shape = _unnorm[:, : _unnorm.shape[1] - SHAPE_DIM]
-_no_shape = _no_shape / np.maximum(
-    np.linalg.norm(_no_shape, axis=1, keepdims=True), 1e-8
-)
-_no_shape = _no_shape.astype(np.float32)
+_type_counts = pd.Series(_types_arr).value_counts()
+_type_props = _type_counts / len(_types_arr)
+_uniform = 1.0 / len(_type_counts)
+_proportional = float((_type_props ** 2).sum())
 
+# Reuse the segment index built in section 10.
+_per_type_hits: dict[str, list[float]] = {t: [] for t in _type_counts.index}
+_overall: list[float] = []
+_id_to_row = {sid: i for i, sid in enumerate(seg_ids)}
 
-def _cumvar(X: np.ndarray, n: int = 20) -> np.ndarray:
-    pca = PCA(n_components=min(X.shape[1], n))
-    pca.fit(X)
-    return np.cumsum(pca.explained_variance_ratio_)
+for _qi, _qid in enumerate(seg_ids):
+    _qtype = _types_arr[_qi]
+    _hits = search(_seg_index, seg_vectors[_qi], k=_K + 1)
+    _nb_types = [
+        _types_arr[_id_to_row[h.id]]
+        for h in _hits if h.id != _qid
+    ][:_K]
+    if not _nb_types:
+        continue
+    _frac = sum(1 for t in _nb_types if t == _qtype) / len(_nb_types)
+    _overall.append(_frac)
+    _per_type_hits[_qtype].append(_frac)
 
+_overall_purity = float(np.mean(_overall))
+_per_type_purity = {
+    t: float(np.mean(v)) if v else float("nan")
+    for t, v in _per_type_hits.items()
+}
 
-_cum_no = _cumvar(_no_shape)
-_cum_full = _cumvar(seg_vectors)
+print(f"Neighbour purity at k={_K}: {100*_overall_purity:.1f}%")
+print(f"  uniform random baseline:      {100*_uniform:.1f}%")
+print(f"  proportional random baseline: {100*_proportional:.1f}% "
+      f"(matches actual type distribution)")
+print(f"\nPer-type purity (n = segments of that type):")
+for _t in _type_counts.index:
+    print(
+        f"  {_t:<12s}  n={int(_type_counts[_t]):>3d}  "
+        f"share={_type_props[_t]*100:>5.1f}%  "
+        f"purity@{_K}={_per_type_purity[_t]*100:>5.1f}%"
+    )
 
-# Headline numbers
-_pp_at_2 = 100 * (_cum_full[1] - _cum_no[1])
-_pp_at_5 = 100 * (_cum_full[4] - _cum_no[4])
-print(f"PC1+PC2 explained variance:")
-print(f"  without shape ({_no_shape.shape[1]}-d): {100 * _cum_no[1]:.1f}%")
-print(f"  with shape    ({seg_vectors.shape[1]}-d): {100 * _cum_full[1]:.1f}%   "
-      f"(+{_pp_at_2:.1f} pp)")
-print(f"\nFirst 5 components:")
-print(f"  without shape: {100 * _cum_no[4]:.1f}%")
-print(f"  with shape:    {100 * _cum_full[4]:.1f}%   (+{_pp_at_5:.1f} pp)")
-
-# Plot
-fig, ax = plt.subplots(figsize=(9, 5))
-_xs_no = np.arange(1, len(_cum_no) + 1)
-_xs_full = np.arange(1, len(_cum_full) + 1)
-ax.plot(_xs_no, 100 * _cum_no, marker="o", ms=4, lw=1.8,
-        color="#888888", label=f"without shape ({_no_shape.shape[1]}-d)")
-ax.plot(_xs_full, 100 * _cum_full, marker="o", ms=4, lw=1.8,
-        color="#D55E00", label=f"with shape ({seg_vectors.shape[1]}-d)")
-ax.set_xlabel("number of principal components")
-ax.set_ylabel("cumulative explained variance (%)")
-ax.set_title("Adding the shape block lifts the leading PCs")
-ax.legend(loc="lower right")
-ax.grid(True, alpha=0.2)
-ax.set_xticks(np.arange(1, len(_cum_full) + 1, 2))
+# Bar chart: overall + per-type purity vs the proportional baseline
+fig, ax = plt.subplots(figsize=(9, 4.5))
+_labels = ["overall"] + list(_type_counts.index)
+_vals = [_overall_purity] + [_per_type_purity[t] for t in _type_counts.index]
+_colours = ["#444444"] + [COLOUR[t] for t in _type_counts.index]
+_bars = ax.barh(_labels, [100 * v for v in _vals], color=_colours)
+ax.axvline(100 * _proportional, color="#888", ls="--", lw=1,
+           label=f"proportional random ({100*_proportional:.1f}%)")
+ax.axvline(100 * _uniform, color="#bbb", ls=":", lw=1,
+           label=f"uniform random ({100*_uniform:.1f}%)")
+ax.set_xlim(0, 100)
+ax.set_xlabel(f"share of top-{_K} neighbours matching query's segment_type (%)")
+ax.set_title("Neighbour purity: how often does similarity retrieve same-kind segments?")
+ax.invert_yaxis()
+ax.legend(loc="lower right", fontsize=9)
+ax.grid(True, alpha=0.2, axis="x")
+for bar, val in zip(_bars, _vals, strict=True):
+    ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
+            f"{100*val:.1f}%", va="center", fontsize=9)
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
-# Reading the curves: the **with-shape** curve sits noticeably above
-# **without-shape** through the first ~7 components, then the two
-# curves cross. The leading PCs gain because shape concentrates
-# variance in axes the smaller recipe couldn't represent. The later
-# PCs descend slightly below because the wider vector spreads its
-# total variance over more axes — the residual lives at the tail.
+# Reading the result:
 #
-# If shape were redundant with kinematic + cyclic + segtype + spatial,
-# both curves would track each other from PC1. The visible gap at the
-# leading components is the signature of an informative addition.
+# * Overall purity well above the proportional baseline means
+#   similarity is retrieving same-kind segments rather than reaching
+#   for whatever happens to be common in the corpus.
+# * Per-type purity reveals where the embedding works easily and
+#   where it doesn't. `MOVE` and `STOP_BRIEF` are the two big,
+#   internally consistent classes — neighbours stay within type
+#   almost always. `MOVE_BRIEF` is geometrically ambiguous: a brief
+#   move sits between a stop and a sustained move in feature space,
+#   so its top-`k` mixes both. `STOP_DWELL` has too few examples in
+#   this slice (~1% of the corpus) for k=10 same-type neighbours to
+#   exist at all — the metric isn't broken, the data is just thin.
+#
+# These limits are properties of the recipe and the corpus, not
+# something to defend against. The recipe is good at the classes
+# that have distinctive kinematic + shape fingerprints and weakest
+# at the classes that sit between them.
 
 # %% [markdown]
 # ## Closing
