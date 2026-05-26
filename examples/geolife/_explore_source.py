@@ -73,6 +73,29 @@ EP_PARAMS = EpisodeParams(R_m=30.0, T_s=120.0, min_stay_s=120.0)
 EMBED_PARAMS = EmbedParams(spatial_bounds=(39.5, 40.5, 115.5, 117.5))
 CLEAN_PARAMS = CleanParams()
 
+# Four widely-separated hues from the Okabe-Ito colour-blind safe
+# palette. Spans the wheel (blue, green, magenta, vermillion) rather
+# than clustering in hue families, so no two segment types look
+# similar at a glance — including under deuteranopia / protanopia /
+# tritanopia.
+COLOUR = {
+    "MOVE": "#0072B2",        # blue
+    "MOVE_BRIEF": "#009E73",  # green
+    "STOP_BRIEF": "#CC79A7",  # magenta
+    "STOP_DWELL": "#D55E00",  # vermillion
+}
+
+legend_html = """
+<div style='position: fixed; top:10px; right:10px; z-index:9999;
+            background:white; padding:8px; border:1px solid #888; font-size:13px;'>
+  <b>Segment type</b><br>
+  <span style='color:#0072B2'>━━━</span> MOVE<br>
+  <span style='color:#009E73'>━━━</span> MOVE_BRIEF<br>
+  <span style='color:#CC79A7'>━━━</span> STOP_BRIEF<br>
+  <span style='color:#D55E00'>━━━</span> STOP_DWELL<br>
+</div>
+"""
+
 # %% [markdown]
 # ## 1. Load Geolife user
 
@@ -168,7 +191,7 @@ print("└── (each segment in turn is a contiguous run of pings)")
 # %%
 type_counts = segments["segment_type"].value_counts()
 fig, ax = plt.subplots(1, 2, figsize=(14, 4))
-type_counts.plot.bar(ax=ax[0], color=["#1f77b4", "#ff7f0e", "#ffbb78", "#d62728"])
+type_counts.plot.bar(ax=ax[0], color=[COLOUR.get(t, "#888") for t in type_counts.index])
 ax[0].set_title("Segment count by type")
 ax[0].set_ylabel("Count")
 ax[0].tick_params(axis="x", rotation=0)
@@ -176,7 +199,7 @@ fractions = (type_counts / type_counts.sum() * 100).round(1)
 for i in range(len(type_counts)):
     ax[0].text(i, type_counts.iloc[i], f" {fractions.iloc[i]}%", ha="center", va="bottom")
 type_total_duration = segments.groupby("segment_type")["duration_s"].sum() / 3600
-type_total_duration.plot.bar(ax=ax[1], color=["#1f77b4", "#ff7f0e", "#ffbb78", "#d62728"])
+type_total_duration.plot.bar(ax=ax[1], color=[COLOUR.get(t, "#888") for t in type_total_duration.index])
 ax[1].set_title("Total duration by type (hours)")
 ax[1].set_ylabel("Hours")
 ax[1].tick_params(axis="x", rotation=0)
@@ -228,9 +251,9 @@ else:
     ax.plot(elapsed_s, speed_kmh, color="#1f77b4", lw=1.5, label="speed (km/h)")
     ax.axhspan(SEG_PARAMS.stop_speed_kmh, SEG_PARAMS.resume_speed_kmh,
                color="#9999cc", alpha=0.15, label="dead zone")
-    ax.axhline(SEG_PARAMS.stop_speed_kmh, color="#d62728", lw=1, ls="--",
+    ax.axhline(SEG_PARAMS.stop_speed_kmh, color="#D55E00", lw=1, ls="--",
                label=f"stop_speed = {SEG_PARAMS.stop_speed_kmh} km/h")
-    ax.axhline(SEG_PARAMS.resume_speed_kmh, color="#2ca02c", lw=1, ls="--",
+    ax.axhline(SEG_PARAMS.resume_speed_kmh, color="#009E73", lw=1, ls="--",
                label=f"resume_speed = {SEG_PARAMS.resume_speed_kmh} km/h")
     prev_s, band_start = state[0], 0
     for k in range(1, len(state) + 1):
@@ -336,24 +359,6 @@ print(pd.DataFrame(_sample_rows).to_string(index=False))
 # discards, and where that abstraction is faithful vs lossy.
 
 # %%
-COLOUR = {
-    "MOVE": "#1f77b4",
-    "MOVE_BRIEF": "#ff7f0e",
-    "STOP_BRIEF": "#ffbb78",
-    "STOP_DWELL": "#d62728",
-}
-
-legend_html = """
-<div style='position: fixed; top:10px; right:10px; z-index:9999;
-            background:white; padding:8px; border:1px solid #888; font-size:13px;'>
-  <b>Segment type</b><br>
-  <span style='color:#1f77b4'>━━━</span> MOVE<br>
-  <span style='color:#ff7f0e'>━━━</span> MOVE_BRIEF<br>
-  <span style='color:#ffbb78'>━━━</span> STOP_BRIEF<br>
-  <span style='color:#d62728'>━━━</span> STOP_DWELL<br>
-</div>
-"""
-
 center_lat = float(pings["lat"].median())
 center_lon = float(pings["lon"].median())
 
@@ -540,23 +545,23 @@ for _ax in (ax_lo, ax_hi):
 _angles_lo = np.deg2rad(60 + _rng.normal(0, 7, size=20))
 for _a in _angles_lo:
     ax_lo.arrow(0, 0, 0.9 * np.cos(_a), 0.9 * np.sin(_a),
-                head_width=0.05, head_length=0.06, color="#1f77b4", alpha=0.55,
+                head_width=0.05, head_length=0.06, color="#0072B2", alpha=0.55,
                 length_includes_head=True)
 _mean_lo = np.array([np.cos(_angles_lo).mean(), np.sin(_angles_lo).mean()])
 _r_lo = float(np.linalg.norm(_mean_lo))
 ax_lo.arrow(0, 0, _mean_lo[0], _mean_lo[1], head_width=0.08, head_length=0.08,
-            color="#d62728", lw=2, length_includes_head=True, zorder=5)
+            color="#D55E00", lw=2, length_includes_head=True, zorder=5)
 ax_lo.set_title(f"Bearings clustered  →  R = {_r_lo:.2f}\n(heading stable)")
 
 _angles_hi = np.deg2rad(_rng.uniform(0, 360, size=20))
 for _a in _angles_hi:
     ax_hi.arrow(0, 0, 0.9 * np.cos(_a), 0.9 * np.sin(_a),
-                head_width=0.05, head_length=0.06, color="#1f77b4", alpha=0.55,
+                head_width=0.05, head_length=0.06, color="#0072B2", alpha=0.55,
                 length_includes_head=True)
 _mean_hi = np.array([np.cos(_angles_hi).mean(), np.sin(_angles_hi).mean()])
 _r_hi = float(np.linalg.norm(_mean_hi))
 ax_hi.arrow(0, 0, _mean_hi[0], _mean_hi[1], head_width=0.08, head_length=0.08,
-            color="#d62728", lw=2, length_includes_head=True, zorder=5)
+            color="#D55E00", lw=2, length_includes_head=True, zorder=5)
 ax_hi.set_title(f"Bearings spread  →  R = {_r_hi:.2f}\n(heading changing)")
 fig_i.suptitle("R = length of the mean unit-vector (red arrow)", fontsize=11, y=1.02)
 plt.tight_layout(); plt.show()
@@ -882,7 +887,7 @@ for _, ep in stays.iterrows():
     folium.CircleMarker(
         location=[float(ep["anchor_lat"]), float(ep["anchor_lon"])],
         radius=radius,
-        color="#d62728",
+        color="#D55E00",  # STAY anchor — matches stopped-warm of the segment palette
         fill=True,
         fill_opacity=0.5,
         tooltip=(
@@ -946,13 +951,13 @@ else:
 ep_type_counts = episodes["episode_type"].value_counts()
 ep_total_duration_h = episodes.groupby("episode_type")["duration_s"].sum() / 3600
 fig, ax = plt.subplots(1, 2, figsize=(14, 4))
-ep_type_counts.plot.bar(ax=ax[0], color=["#d62728", "#1f77b4"])
+ep_type_counts.plot.bar(ax=ax[0], color=["#D55E00", "#0072B2"])
 ax[0].set_title("Episode count by type")
 ax[0].set_ylabel("Count")
 ax[0].tick_params(axis="x", rotation=0)
 for i, count in enumerate(ep_type_counts):
     ax[0].text(i, count, f" {count}", ha="center", va="bottom")
-ep_total_duration_h.plot.bar(ax=ax[1], color=["#d62728", "#1f77b4"])
+ep_total_duration_h.plot.bar(ax=ax[1], color=["#D55E00", "#0072B2"])
 ax[1].set_title("Total duration by type (hours)")
 ax[1].set_ylabel("Hours")
 ax[1].tick_params(axis="x", rotation=0)
