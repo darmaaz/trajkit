@@ -22,6 +22,7 @@ from trajkit.embed._params import (
     CYCLIC_FEATURES,
     KINEMATIC_FEATURES,
     SEGMENT_TYPE_ORDER,
+    SHAPE_FEATURES,
     EmbedParams,
     FeaturePlugin,
 )
@@ -66,6 +67,7 @@ def embed_segments(
         _cyclic_block(df, p.cyclic_harmonics),
         _segment_type_block(df),
         _spatial_block(df, p.spatial_bounds),
+        _shape_block(df, weight=p.shape_weight),
     ]
     for plugin in features:
         block = _validated_plugin_block(plugin, df)
@@ -172,6 +174,54 @@ def _spatial_block(
         ]
     ).astype(_F32)
     return cast(np.ndarray, out)
+
+
+def _shape_block(df: pd.DataFrame, weight: float) -> np.ndarray:
+    """Distance-resampled bearing-shape features, scaled into [-1, 1].
+
+    Multiplied by ``weight`` so the block carries non-trivial energy
+    after the recipe's final L2-normalisation. Default weight (~3) is
+    calibrated so shape is conceptually peer to kinematic energy share;
+    callers pass ``EmbedParams.shape_weight``.
+
+    NaNs (segments below the minimum reliable path length) are filled
+    with neutral values per feature:
+
+    * ``shape_R``, ``shape_R2`` already lie in ``[0, 1]``; null → 1.0
+      (treat unmeasurable as concentrated / straight).
+    * ``shape_signed_net_revs`` is signed; null → 0 (no net rotation).
+    * ``shape_int_curv_deg_per_step`` and ``shape_abs_delta_p95_deg``
+      are non-negative; null → 0 (no measurable curvature).
+    """
+    n = len(df)
+    out = np.zeros((n, len(SHAPE_FEATURES)), dtype=_F32)
+    neutral = {
+        "shape_R": 1.0,
+        "shape_R2": 1.0,
+        "shape_signed_net_revs": 0.0,
+        "shape_int_curv_deg_per_step": 0.0,
+        "shape_abs_delta_p95_deg": 0.0,
+    }
+    for j, col in enumerate(SHAPE_FEATURES):
+        if col not in df.columns:
+            out[:, j] = neutral[col]
+            continue
+        v = df[col].astype(np.float64)
+        v = v.fillna(neutral[col]).to_numpy()
+        if col == "shape_int_curv_deg_per_step":
+            # Bound to [0, 1] via 180° / step as the practical ceiling
+            # (a 180° per-step change is the maximum signed delta).
+            out[:, j] = np.clip(v / 180.0, 0.0, 1.0).astype(_F32)
+        elif col == "shape_abs_delta_p95_deg":
+            out[:, j] = np.clip(v / 180.0, 0.0, 1.0).astype(_F32)
+        elif col == "shape_signed_net_revs":
+            # Clip to [-1, 1] — beyond a full revolution further winding
+            # is information we keep at saturation; rare in practice.
+            out[:, j] = np.clip(v, -1.0, 1.0).astype(_F32)
+        else:
+            # shape_R, shape_R2 already in [0, 1]
+            out[:, j] = np.clip(v, 0.0, 1.0).astype(_F32)
+    return (out * weight).astype(_F32)
 
 
 # ── Plugin shape validation ─────────────────────────────────────────

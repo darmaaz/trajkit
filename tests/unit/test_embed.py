@@ -109,27 +109,40 @@ def test_embed_segments_ids_align_with_input_order() -> None:
 
 
 def test_embed_segments_segment_type_one_hot_block_is_one_hot() -> None:
+    from trajkit.embed._params import (
+        CYCLIC_FEATURE_DIM,
+        CYCLIC_FEATURES,
+        KINEMATIC_DIM,
+        SEGMENT_TYPE_DIM,
+    )
     segs = _segments_for()
     vectors, _ = embed_segments(segs, EmbedParams(l2_normalize=False))
     p = EmbedParams()
-    cyclic_dim = p.cyclic_harmonics * 2 * 2
-    type_start = 8 + cyclic_dim  # kinematic(8) + cyclic
-    type_end = type_start + 4
+    cyclic_dim = p.cyclic_harmonics * CYCLIC_FEATURE_DIM * len(CYCLIC_FEATURES)
+    type_start = KINEMATIC_DIM + cyclic_dim
+    type_end = type_start + SEGMENT_TYPE_DIM
     one_hot = vectors[:, type_start:type_end]
     assert (one_hot.sum(axis=1) == 1.0).all()
     assert ((one_hot == 0.0) | (one_hot == 1.0)).all()
 
 
 def test_embed_segments_spatial_block_clips_to_unit_interval() -> None:
+    from trajkit.embed._params import (
+        CYCLIC_FEATURE_DIM,
+        CYCLIC_FEATURES,
+        KINEMATIC_DIM,
+        SEGMENT_TYPE_DIM,
+        SPATIAL_DIM,
+    )
     segs = _segments_for()
     vectors, _ = embed_segments(
         segs,
         EmbedParams(l2_normalize=False, spatial_bounds=(19.0, 20.0, -100.0, -99.0)),
     )
     p = EmbedParams()
-    cyclic_dim = p.cyclic_harmonics * 2 * 2
-    spatial_start = 8 + cyclic_dim + 4
-    spatial_end = spatial_start + 4
+    cyclic_dim = p.cyclic_harmonics * CYCLIC_FEATURE_DIM * len(CYCLIC_FEATURES)
+    spatial_start = KINEMATIC_DIM + cyclic_dim + SEGMENT_TYPE_DIM
+    spatial_end = spatial_start + SPATIAL_DIM
     spatial = vectors[:, spatial_start:spatial_end]
     assert (spatial >= 0.0).all()
     assert (spatial <= 1.0).all()
@@ -169,7 +182,9 @@ def test_embed_segments_plugin_extends_dimension() -> None:
     p = EmbedParams()
     vectors, _ = embed_segments(segs, p, features=(plugin,))
     assert vectors.shape[1] == p.expected_dim((plugin,))
-    assert vectors.shape[1] == 32 + 3
+    # Base dim = kinematic(8) + cyclic(2*2*K) + segtype(4) + spatial(4) + shape(5).
+    # With default cyclic_harmonics=4 the cyclic block is 16, total = 37.
+    assert vectors.shape[1] == p.base_dim() + plugin.dim
 
 
 def test_embed_segments_plugin_shape_mismatch_raises() -> None:

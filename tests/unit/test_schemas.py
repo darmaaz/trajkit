@@ -94,6 +94,11 @@ def _segments(n: int = 3) -> pd.DataFrame:
             "max_speed_ms": np.full(n, 12.0, dtype=np.float32),
             "bearing_variance": np.full(n, 0.05, dtype=np.float32),
             "n_pings": np.full(n, 60, dtype=np.int32),
+            "shape_R": np.full(n, 0.95, dtype=np.float32),
+            "shape_R2": np.full(n, 0.90, dtype=np.float32),
+            "shape_signed_net_revs": np.full(n, 0.0, dtype=np.float32),
+            "shape_int_curv_deg_per_step": np.full(n, 3.0, dtype=np.float32),
+            "shape_abs_delta_p95_deg": np.full(n, 10.0, dtype=np.float32),
         }
     )
 

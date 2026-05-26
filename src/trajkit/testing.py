@@ -174,6 +174,14 @@ def make_segments(
                 ),
                 "bearing_variance": 0.05,
                 "n_pings": int(round(duration_s)),
+                # Synthetic shape: MOVE segments here are straight lines,
+                # so R≈1, no rotation, no curvature. Stops have no
+                # meaningful shape — emit None.
+                "shape_R": 1.0 if seg_type == "MOVE" else None,
+                "shape_R2": 1.0 if seg_type == "MOVE" else None,
+                "shape_signed_net_revs": 0.0 if seg_type == "MOVE" else None,
+                "shape_int_curv_deg_per_step": 0.0 if seg_type == "MOVE" else None,
+                "shape_abs_delta_p95_deg": 0.0 if seg_type == "MOVE" else None,
             }
         )
 
@@ -253,6 +261,11 @@ def _empty_segments_frame() -> pd.DataFrame:
             "max_speed_ms": pd.Series([], dtype=np.float32),
             "bearing_variance": pd.Series([], dtype=np.float32),
             "n_pings": pd.Series([], dtype=np.int32),
+            "shape_R": pd.Series([], dtype=np.float32),
+            "shape_R2": pd.Series([], dtype=np.float32),
+            "shape_signed_net_revs": pd.Series([], dtype=np.float32),
+            "shape_int_curv_deg_per_step": pd.Series([], dtype=np.float32),
+            "shape_abs_delta_p95_deg": pd.Series([], dtype=np.float32),
         }
     )
 
@@ -269,6 +282,11 @@ def _coerce_segments_dtypes(rows: list[dict[str, object]]) -> pd.DataFrame:
         "mean_speed_ms",
         "max_speed_ms",
         "bearing_variance",
+        "shape_R",
+        "shape_R2",
+        "shape_signed_net_revs",
+        "shape_int_curv_deg_per_step",
+        "shape_abs_delta_p95_deg",
     ]
     f64_cols = ["start_lat", "start_lon", "end_lat", "end_lon"]
     for c in string_cols:

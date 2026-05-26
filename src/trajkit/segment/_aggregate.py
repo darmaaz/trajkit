@@ -14,6 +14,14 @@ from trajkit.segment._params import SegmentParams
 
 _GEOD = Geod(ellps="WGS84")
 
+# Distance-resampling step (metres) for the shape block. At this scale
+# inter-step displacement dominates GPS position error, so bearings
+# between resampled positions represent real ground motion.
+_SHAPE_RESAMPLE_STEP_M = 25.0
+# Minimum resampled steps before shape statistics are considered
+# reliable. Below this, shape columns are emitted as NaN.
+_SHAPE_MIN_STEPS = 5
+
 
 def aggregate_segments(
     segmented_pings_df: pd.DataFrame,
@@ -106,6 +114,8 @@ def _aggregate_one_segment(
     else:
         n_pings = int(len(g))
 
+    shape = _shape_block(g["lat"].to_numpy(), g["lon"].to_numpy())
+
     return {
         "segment_id": str(seg_id),
         "entity_id": entity_id,
@@ -126,6 +136,84 @@ def _aggregate_one_segment(
         "max_speed_ms": max_speed_ms,
         "bearing_variance": bearing_variance,
         "n_pings": n_pings,
+        "shape_R": shape["R"],
+        "shape_R2": shape["R2"],
+        "shape_signed_net_revs": shape["signed_net_revs"],
+        "shape_int_curv_deg_per_step": shape["int_curv"],
+        "shape_abs_delta_p95_deg": shape["abs_delta_p95"],
+    }
+
+
+def _shape_block(lat: np.ndarray, lon: np.ndarray) -> dict[str, float | None]:
+    """Distance-resampled bearing-shape features for one segment.
+
+    Resamples the segment's (lat, lon) sequence at fixed distance
+    intervals so each resampled step represents real ground motion well
+    above GPS position error. Computes circular-statistics summaries of
+    the resampled bearings.
+
+    Returns NaN for all features when the segment has fewer than
+    ``_SHAPE_MIN_STEPS`` resampled steps (i.e. path length below
+    ``(_SHAPE_MIN_STEPS - 1) * _SHAPE_RESAMPLE_STEP_M``). Below that
+    threshold the statistics are dominated by sampling noise.
+    """
+    nan_block: dict[str, float | None] = {
+        "R": None,
+        "R2": None,
+        "signed_net_revs": None,
+        "int_curv": None,
+        "abs_delta_p95": None,
+    }
+    if len(lat) < 2:
+        return nan_block
+
+    # Cumulative great-circle distance along the path.
+    phi1 = np.radians(lat[:-1])
+    phi2 = np.radians(lat[1:])
+    dphi = np.radians(lat[1:] - lat[:-1])
+    dlmb = np.radians(lon[1:] - lon[:-1])
+    a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlmb / 2) ** 2
+    step_d = 2 * 6_371_000.0 * np.arcsin(np.sqrt(a))
+    cum_d = np.concatenate([[0.0], np.cumsum(step_d)])
+    total = float(cum_d[-1])
+    if total < (_SHAPE_MIN_STEPS - 1) * _SHAPE_RESAMPLE_STEP_M:
+        return nan_block
+
+    # Resample (lat, lon) at fixed distance steps; bearings between
+    # consecutive resampled points are the shape primitive.
+    sample_dists = np.arange(0.0, total, _SHAPE_RESAMPLE_STEP_M)
+    sample_lat = np.interp(sample_dists, cum_d, lat)
+    sample_lon = np.interp(sample_dists, cum_d, lon)
+    sphi1 = np.radians(sample_lat[:-1])
+    sphi2 = np.radians(sample_lat[1:])
+    sdlmb = np.radians(sample_lon[1:] - sample_lon[:-1])
+    x = np.sin(sdlmb) * np.cos(sphi2)
+    y = np.cos(sphi1) * np.sin(sphi2) - np.sin(sphi1) * np.cos(sphi2) * np.cos(sdlmb)
+    rb = (np.degrees(np.arctan2(x, y)) + 360.0) % 360.0
+    if len(rb) < _SHAPE_MIN_STEPS:
+        return nan_block
+
+    rad = np.deg2rad(rb)
+    # ``R`` (mean resultant length) is the canonical name in circular
+    # statistics; ``R2`` is the second-moment generalisation. Keep the
+    # mathematical convention rather than renaming.
+    R = float(np.sqrt(np.mean(np.cos(rad)) ** 2 + np.mean(np.sin(rad)) ** 2))  # noqa: N806
+    rad2 = rad * 2.0
+    R2 = float(np.sqrt(np.mean(np.cos(rad2)) ** 2 + np.mean(np.sin(rad2)) ** 2))  # noqa: N806
+
+    # Wraparound-correct signed shortest-path step deltas.
+    raw = np.diff(rb)
+    deltas = ((raw + 180.0) % 360.0) - 180.0
+    abs_d = np.abs(deltas)
+    signed_net_revs = float(np.sum(deltas) / 360.0)
+    int_curv = float(np.mean(abs_d))
+    abs_delta_p95 = float(np.quantile(abs_d, 0.95))
+    return {
+        "R": R,
+        "R2": R2,
+        "signed_net_revs": signed_net_revs,
+        "int_curv": int_curv,
+        "abs_delta_p95": abs_delta_p95,
     }
 
 
@@ -165,6 +253,11 @@ def _enforce_dtypes(df: pd.DataFrame) -> pd.DataFrame:
         "mean_speed_ms",
         "max_speed_ms",
         "bearing_variance",
+        "shape_R",
+        "shape_R2",
+        "shape_signed_net_revs",
+        "shape_int_curv_deg_per_step",
+        "shape_abs_delta_p95_deg",
     ]
     f64_cols = ["start_lat", "start_lon", "end_lat", "end_lon"]
     for c in string_cols:
@@ -202,5 +295,10 @@ def _empty_segments_frame() -> pd.DataFrame:
             "max_speed_ms": pd.Series([], dtype=np.float32),
             "bearing_variance": pd.Series([], dtype=np.float32),
             "n_pings": pd.Series([], dtype=np.int32),
+            "shape_R": pd.Series([], dtype=np.float32),
+            "shape_R2": pd.Series([], dtype=np.float32),
+            "shape_signed_net_revs": pd.Series([], dtype=np.float32),
+            "shape_int_curv_deg_per_step": pd.Series([], dtype=np.float32),
+            "shape_abs_delta_p95_deg": pd.Series([], dtype=np.float32),
         }
     )

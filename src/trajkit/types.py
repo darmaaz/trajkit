@@ -163,6 +163,14 @@ class SegmentsSchema(pdr.DataFrameModel):
     max_speed_ms: Series[np.float32] = pdr.Field(nullable=True, ge=0.0)
     bearing_variance: Series[np.float32] = pdr.Field(nullable=True, ge=0.0, le=1.0)
     n_pings: Series[np.int32] = pdr.Field(nullable=False, ge=1)
+    # Distance-resampled bearing-shape features. NaN for segments below
+    # the minimum reliable path length (see trajkit.segment._aggregate).
+    # ``R``/``R2`` follow the standard circular-statistics convention.
+    shape_R: Series[np.float32] = pdr.Field(nullable=True, ge=0.0, le=1.0)  # noqa: N815
+    shape_R2: Series[np.float32] = pdr.Field(nullable=True, ge=0.0, le=1.0)  # noqa: N815
+    shape_signed_net_revs: Series[np.float32] = pdr.Field(nullable=True)
+    shape_int_curv_deg_per_step: Series[np.float32] = pdr.Field(nullable=True, ge=0.0)
+    shape_abs_delta_p95_deg: Series[np.float32] = pdr.Field(nullable=True, ge=0.0)
 
     class Config:
         strict = True
@@ -191,6 +199,11 @@ SEGMENTS_ARROW: pa.Schema = _with_version(
             pa.field("max_speed_ms", pa.float32(), nullable=True),
             pa.field("bearing_variance", pa.float32(), nullable=True),
             pa.field("n_pings", pa.int32(), nullable=False),
+            pa.field("shape_R", pa.float32(), nullable=True),
+            pa.field("shape_R2", pa.float32(), nullable=True),
+            pa.field("shape_signed_net_revs", pa.float32(), nullable=True),
+            pa.field("shape_int_curv_deg_per_step", pa.float32(), nullable=True),
+            pa.field("shape_abs_delta_p95_deg", pa.float32(), nullable=True),
         ]
     )
 )
