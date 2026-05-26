@@ -1278,35 +1278,84 @@ m_ep_sim
 # decision.
 
 # %% [markdown]
-# ## 18. Embedding sanity — PCA of segment vectors
+# ## 18. Does the shape block carry information?
 #
-# If the 32-d segment vectors carry meaningful type information, the
-# four classes should at least partially separate in 2-D. The PCA below
-# is a quick sanity check; clean separation would say the recipe is
-# doing real work, total overlap would say it's mostly noise.
+# Sanity check on the design decision to add a shape block to the
+# segment vector. If the shape features are mostly redundant with what
+# kinematic / cyclic / segtype / spatial already encode, a PCA over
+# the with-shape vector should look the same as a PCA over the
+# without-shape vector. If shape adds independent signal, the
+# with-shape PCA's leading components should explain more of the
+# variance — shape concentrates information in axes the smaller
+# vector cannot see.
 
 # %%
 from sklearn.decomposition import PCA  # noqa: E402
+from trajkit.embed._params import SHAPE_DIM  # noqa: E402
 
-_pca = PCA(n_components=2)
-_xy = _pca.fit_transform(seg_vectors)
-_types_arr = segments.set_index("segment_id").loc[seg_ids]["segment_type"].to_numpy()
 
-fig, ax = plt.subplots(figsize=(8, 6))
-for _t, _c in COLOUR.items():
-    _m = _types_arr == _t
-    if not _m.any():
-        continue
-    ax.scatter(_xy[_m, 0], _xy[_m, 1], s=18, alpha=0.55, c=_c,
-               label=f"{_t} (n={int(_m.sum())})", edgecolors="none")
-ax.set_xlabel(f"PC1 ({_pca.explained_variance_ratio_[0] * 100:.1f}%)")
-ax.set_ylabel(f"PC2 ({_pca.explained_variance_ratio_[1] * 100:.1f}%)")
-ax.set_title("Segment vectors in 2-D PCA — coloured by segment_type")
-ax.legend(loc="best", fontsize=9)
+# Rebuild the without-shape variant: take the unnormalised recipe
+# output, strip the trailing shape dims, then L2-normalise. That is
+# the vector the recipe would have produced if shape weren't part of
+# the recipe.
+_unnorm, _ = embed_segments(
+    segments,
+    EmbedParams(spatial_bounds=EMBED_PARAMS.spatial_bounds, l2_normalize=False),
+)
+_no_shape = _unnorm[:, : _unnorm.shape[1] - SHAPE_DIM]
+_no_shape = _no_shape / np.maximum(
+    np.linalg.norm(_no_shape, axis=1, keepdims=True), 1e-8
+)
+_no_shape = _no_shape.astype(np.float32)
+
+
+def _cumvar(X: np.ndarray, n: int = 20) -> np.ndarray:
+    pca = PCA(n_components=min(X.shape[1], n))
+    pca.fit(X)
+    return np.cumsum(pca.explained_variance_ratio_)
+
+
+_cum_no = _cumvar(_no_shape)
+_cum_full = _cumvar(seg_vectors)
+
+# Headline numbers
+_pp_at_2 = 100 * (_cum_full[1] - _cum_no[1])
+_pp_at_5 = 100 * (_cum_full[4] - _cum_no[4])
+print(f"PC1+PC2 explained variance:")
+print(f"  without shape ({_no_shape.shape[1]}-d): {100 * _cum_no[1]:.1f}%")
+print(f"  with shape    ({seg_vectors.shape[1]}-d): {100 * _cum_full[1]:.1f}%   "
+      f"(+{_pp_at_2:.1f} pp)")
+print(f"\nFirst 5 components:")
+print(f"  without shape: {100 * _cum_no[4]:.1f}%")
+print(f"  with shape:    {100 * _cum_full[4]:.1f}%   (+{_pp_at_5:.1f} pp)")
+
+# Plot
+fig, ax = plt.subplots(figsize=(9, 5))
+_xs_no = np.arange(1, len(_cum_no) + 1)
+_xs_full = np.arange(1, len(_cum_full) + 1)
+ax.plot(_xs_no, 100 * _cum_no, marker="o", ms=4, lw=1.8,
+        color="#888888", label=f"without shape ({_no_shape.shape[1]}-d)")
+ax.plot(_xs_full, 100 * _cum_full, marker="o", ms=4, lw=1.8,
+        color="#D55E00", label=f"with shape ({seg_vectors.shape[1]}-d)")
+ax.set_xlabel("number of principal components")
+ax.set_ylabel("cumulative explained variance (%)")
+ax.set_title("Adding the shape block lifts the leading PCs")
+ax.legend(loc="lower right")
 ax.grid(True, alpha=0.2)
+ax.set_xticks(np.arange(1, len(_cum_full) + 1, 2))
 plt.tight_layout(); plt.show()
-print(f"PC1+PC2 explained variance: "
-      f"{_pca.explained_variance_ratio_.sum() * 100:.1f}%")
+
+# %% [markdown]
+# Reading the curves: the **with-shape** curve sits noticeably above
+# **without-shape** through the first ~7 components, then the two
+# curves cross. The leading PCs gain because shape concentrates
+# variance in axes the smaller recipe couldn't represent. The later
+# PCs descend slightly below because the wider vector spreads its
+# total variance over more axes — the residual lives at the tail.
+#
+# If shape were redundant with kinematic + cyclic + segtype + spatial,
+# both curves would track each other from PC1. The visible gap at the
+# leading components is the signature of an informative addition.
 
 # %% [markdown]
 # ## Closing
