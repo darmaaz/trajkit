@@ -5,18 +5,6 @@
          <lastmod>2026-05-27</lastmod>
     </url>
     <url>
-         <loc>https://darmaaz.github.io/trajkit/concepts/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/concepts/parameters/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/concepts/pipeline/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
          <loc>https://darmaaz.github.io/trajkit/design/LIBRARY/</loc>
          <lastmod>2026-05-27</lastmod>
     </url>
@@ -42,38 +30,6 @@
     </url>
     <url>
          <loc>https://darmaaz.github.io/trajkit/design/segment/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/clean/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/compare/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/embed/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/episode/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/segment/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/testing/</loc>
-         <lastmod>2026-05-27</lastmod>
-    </url>
-    <url>
-         <loc>https://darmaaz.github.io/trajkit/reference/types/</loc>
          <lastmod>2026-05-27</lastmod>
     </url>
 </urlset>
