@@ -1150,132 +1150,359 @@ m_stay_anat
 # fit inside that circle.
 
 # %% [markdown]
-# ## 17. Episode similarity — *"find me trips like this trip"*
+# ## 17. TRANSIT similarity — *"find me trips like this trip"*
 #
-# `embed_segments` produces one vector per segment. Episode-level
-# pooling is a user-side choice; here we concat
-# `[mean, std, max-by-magnitude]` across an episode's segments and
-# append two episode-level scalars. Cosine similarity over the result
-# matches on behaviour shape, not geography.
+# A trip is a sequence, not a bag of segments. Pooling per-segment
+# vectors (mean / std / max) discards order and washes out the
+# shape signal that `embed_segments` worked to encode — and the
+# raw episode-level scalars added to compensate then dominate the
+# L2-normalised pool. The honest fix is not to rebalance the pool
+# but to ask: what *is* a trip, and which features actually
+# distinguish two trips?
 #
-# The query is rendered in **black**, the top-5 hits in colour with
-# decreasing opacity by rank.
+# Each block below answers one such question:
+#
+# * **Motion-state mix** (4 dims) — fraction of duration in each
+#   segment type. Captures stop-and-go vs sustained structure.
+# * **Structure** (2 dims) — state-transition count, log
+#   segment-count. How chunked was the trip?
+# * **Speed signature during `MOVE`** (3 dims) — mean / max / std
+#   of per-segment mean speed across the trip's `MOVE` segments.
+#   Lets cosine separate walks from drives without classifying
+#   transport modes the segmenter never labelled.
+# * **Scale** (3 dims) — log of duration, path, displacement.
+# * **Trip shape** (2 dims) — end-to-end straightness and
+#   path-weighted mean per-step curvature.
+# * **Time context** (4 dims) — cyclic hour-of-day and day-of-week.
+#
+# **Metric, threshold, and query choice are all data-driven.** Each
+# feature is standardised (subtract column mean, divide by column
+# std) so a 1-σ deviation in any feature contributes equally to the
+# pairwise distance. The metric is **Euclidean** rather than cosine:
+# cosine on standardised vectors rewards "both unusually large on the
+# same axis," which lets a single bimodal feature (e.g. `MOVE` speed
+# splitting walks vs drives) dominate the score. Euclidean asks the
+# more intuitive question — "how close are you in z-space" — and lets
+# every axis contribute proportionally to actual distance.
+#
+# The similarity threshold is the **5th percentile of all pairwise
+# distances**: a hit is admitted only if it sits closer than 95 % of
+# random pairs do. The query itself is chosen as the trip with the
+# most neighbours under this threshold — so the demo lands on a
+# corner of the corpus where similarity actually *has* neighbours to
+# find, rather than between clusters where no metric could help.
+#
+# The query is rendered in **black**, hits in colour by rank with
+# decreasing opacity. The hits list is whatever survives the
+# threshold — no `k`-padding.
 
 # %%
-def _pool_episode(seg_vec_subset: np.ndarray, ep_row: pd.Series) -> np.ndarray:
-    """3·D + 4 episode-level scalars; L2-normalised.
+_SEG_TYPE_ORDER = ("MOVE", "MOVE_BRIEF", "STOP_BRIEF", "STOP_DWELL")
 
-    The episode-level scalars carry length/shape information that pure
-    segment-vector pooling washes out: total duration, total path
-    length, segment count, and a TRANSIT one-hot.
+
+def _transit_features(ep_row: pd.Series, seg_subset: pd.DataFrame) -> dict[str, float]:
+    """Trip-native features for one TRANSIT episode.
+
+    ``seg_subset`` is the rows of ``segments`` belonging to ``ep_row``,
+    in time order. Returns a dict so the column ordering is explicit
+    and self-documenting; the caller stacks into a frame.
     """
-    if len(seg_vec_subset) == 0:
-        return np.zeros(seg_vec_subset.shape[1] * 3 + 4, dtype=np.float32)
-    mean = seg_vec_subset.mean(axis=0)
-    std = seg_vec_subset.std(axis=0)
-    abs_argmax = np.abs(seg_vec_subset).argmax(axis=0)
-    cols = np.arange(seg_vec_subset.shape[1])
-    max_by_mag = seg_vec_subset[abs_argmax, cols]
+    dur = float(ep_row["duration_s"])
+    path = float(ep_row["path_length_m"] or 0.0)
+    disp = float(ep_row["displacement_m"] or 0.0)
 
-    raw_path = ep_row.get("path_length_m")
-    path_m = (
-        float(raw_path) if raw_path is not None and not pd.isna(raw_path) else 0.0
+    seg_dur = seg_subset["duration_s"].to_numpy(dtype=np.float64)
+    seg_type = seg_subset["segment_type"].to_numpy()
+    total_dur = max(seg_dur.sum(), 1e-9)
+    mix = {t: 0.0 for t in _SEG_TYPE_ORDER}
+    for t, d in zip(seg_type, seg_dur, strict=True):
+        if t in mix:
+            mix[t] += d / total_dur
+
+    n_state_trans = (
+        int((seg_type[1:] != seg_type[:-1]).sum()) if len(seg_type) > 1 else 0
     )
-    scalars = np.array(
-        [
-            np.log1p(max(float(ep_row["duration_s"]), 0.0)),
-            np.log1p(max(path_m, 0.0)),
-            np.log1p(max(float(ep_row["n_segments"]), 0.0)),
-            1.0 if ep_row["episode_type"] == "TRANSIT" else 0.0,
-        ],
-        dtype=np.float32,
-    )
-    v = np.concatenate([mean, std, max_by_mag, scalars]).astype(np.float32)
-    norm = float(np.linalg.norm(v))
-    return v / max(norm, 1e-8)
 
-_seg_id_to_row = {sid: i for i, sid in enumerate(seg_ids)}
-_pooled_rows = []
-_pooled_ids = []
-for _, ep_row in episodes.iterrows():
-    member_rows = [
-        _seg_id_to_row[sid] for sid in ep_row["segment_ids"] if sid in _seg_id_to_row
-    ]
-    if not member_rows:
-        continue
-    _pooled_rows.append(_pool_episode(seg_vectors[member_rows], ep_row))
-    _pooled_ids.append(str(ep_row["episode_id"]))
+    move_mask = seg_type == "MOVE"
+    move_speeds = seg_subset.loc[move_mask, "mean_speed_ms"].dropna().to_numpy()
+    if len(move_speeds) > 0:
+        mean_move = float(move_speeds.mean())
+        max_move = float(move_speeds.max())
+        std_move = float(move_speeds.std()) if len(move_speeds) > 1 else 0.0
+    else:
+        mean_move = max_move = std_move = 0.0
 
-ep_vectors = np.vstack(_pooled_rows).astype(np.float32)
-ep_ids = _pooled_ids
+    # Clip: rare ping-gaps inside the episode let `displacement_m` slightly
+    # exceed the sum of per-segment `path_length_m`.
+    straightness = float(min(disp / path, 1.0)) if path > 0 else 0.0
+    seg_curv = seg_subset["shape_abs_delta_p95_deg"].fillna(0.0).to_numpy()
+    seg_path = seg_subset["path_length_m"].fillna(0.0).to_numpy()
+    trip_turning = float((seg_curv * seg_path).sum() / max(seg_path.sum(), 1e-9))
 
-# Pick a query programmatically: the median-duration TRANSIT with at least 3
-# constituent segments. Hard-coded IDs are brittle across parameter changes.
+    start_ts = pd.Timestamp(ep_row["start_ts"])
+    hod = (start_ts.hour + start_ts.minute / 60.0) / 24.0
+    dow = start_ts.dayofweek / 7.0
+
+    return {
+        # Motion-state mix
+        "frac_MOVE":         mix["MOVE"],
+        "frac_MOVE_BRIEF":   mix["MOVE_BRIEF"],
+        "frac_STOP_BRIEF":   mix["STOP_BRIEF"],
+        "frac_STOP_DWELL":   mix["STOP_DWELL"],
+        # Structure
+        "n_state_trans":     float(n_state_trans),
+        "log_n_segments":    float(np.log1p(float(ep_row["n_segments"]))),
+        # Speed signature during MOVE
+        "mean_move_speed":   mean_move,
+        "max_move_speed":    max_move,
+        "std_move_speed":    std_move,
+        # Scale
+        "log_duration_s":    float(np.log1p(max(dur, 0.0))),
+        "log_path_m":        float(np.log1p(max(path, 0.0))),
+        "log_displacement":  float(np.log1p(max(disp, 0.0))),
+        # Trip shape
+        "straightness":      straightness,
+        "trip_turning_deg":  trip_turning,
+        # Time context
+        "hod_sin":           float(np.sin(2 * np.pi * hod)),
+        "hod_cos":           float(np.cos(2 * np.pi * hod)),
+        "dow_sin":           float(np.sin(2 * np.pi * dow)),
+        "dow_cos":           float(np.cos(2 * np.pi * dow)),
+    }
+
+
+transits = episodes[episodes["episode_type"] == "TRANSIT"].reset_index(drop=True)
+_seg_by_id = segments.set_index("segment_id")
+
+_rows: list[dict[str, float]] = []
+_ids: list[str] = []
+for _, _ep in transits.iterrows():
+    _seg_subset = _seg_by_id.loc[list(_ep["segment_ids"])].reset_index()
+    _rows.append(_transit_features(_ep, _seg_subset))
+    _ids.append(str(_ep["episode_id"]))
+
+tr_features = pd.DataFrame(_rows, index=_ids)
+print(f"TRANSIT episodes: {len(tr_features)}, features: {tr_features.shape[1]}")
+
+# Standardise per-column so a 1-σ deviation contributes equally on every axis.
+_tr_mu = tr_features.mean()
+_tr_sd = tr_features.std().replace(0.0, 1.0)
+_Z = ((tr_features - _tr_mu) / _tr_sd).to_numpy(dtype=np.float32)
+
+# Pairwise Euclidean distances (corpus small enough for full matrix; for
+# larger corpora, estimate the percentile from a random sample of pairs).
+_D = np.sqrt(((_Z[:, None, :] - _Z[None, :, :]) ** 2).sum(axis=2))
+_upper = _D[np.triu_indices(len(_Z), k=1)]
+TR_THRESH = float(np.percentile(_upper, 5))
+print(
+    f"Distance threshold (5th percentile of pairwise dists): {TR_THRESH:.2f}"
+)
+
+# Pick the query: the trip with the most neighbours within threshold.
+# Honest, data-driven, and lands the demo on a well-supported part of
+# the corpus (rather than between clusters).
 m_ep_sim = None
-transit_episodes = episodes[
-    (episodes["episode_type"] == "TRANSIT") & (episodes["n_segments"] >= 3)
-].sort_values("duration_s").reset_index(drop=True)
-if len(transit_episodes) > 0:
-    query_ep_id = str(transit_episodes.iloc[len(transit_episodes) // 2]["episode_id"])
-    query_idx = ep_ids.index(query_ep_id)
-    ep_index = build_index(ep_vectors, ep_ids, metric="cosine")
-    ep_hits = search(ep_index, ep_vectors[query_idx], k=6)
-    print(f"Query: {query_ep_id}")
-    hits_table = pd.DataFrame(
-        [{"rank": h.rank, "episode_id": h.id, "score": h.score} for h in ep_hits]
-    )
-    hits_table = hits_table.merge(
-        episodes[
-            ["episode_id", "episode_type", "duration_s", "n_segments",
-             "path_length_m", "displacement_m"]
-        ],
-        on="episode_id",
-    )
+if len(_Z) > 1:
+    _neighbour_counts = (_D <= TR_THRESH).sum(axis=1) - 1  # exclude self
+    _q_idx = int(np.argmax(_neighbour_counts))
+    query_ep_id = _ids[_q_idx]
+
+    _within = np.where(_D[_q_idx] <= TR_THRESH)[0]
+    _within = _within[np.argsort(_D[_q_idx, _within])]
+
+    _hit_rows = []
+    for _rank, _j in enumerate(_within):
+        _ep = transits.loc[transits["episode_id"] == _ids[_j]].iloc[0]
+        _f = tr_features.iloc[_j]
+        _hit_rows.append({
+            "rank":     _rank,
+            "episode_id": _ids[_j],
+            "dist":     round(float(_D[_q_idx, _j]), 2),
+            "dur_min":  int(round(float(_ep["duration_s"]) / 60)),
+            "path_km":  round(float(_ep["path_length_m"]) / 1000, 1),
+            "n_segs":   int(_ep["n_segments"]),
+            "move_pct": int(round(_f["frac_MOVE"] * 100)),
+            "stop_pct": int(round(_f["frac_STOP_BRIEF"] * 100)),
+            "v_ms":     round(_f["mean_move_speed"], 1),
+            "straight": round(_f["straightness"], 2),
+        })
+    hits_table = pd.DataFrame(_hit_rows)
+
     print(
-        hits_table[
-            ["rank", "episode_id", "score", "episode_type", "duration_s",
-             "n_segments", "path_length_m"]
-        ].round(3).to_string(index=False)
+        f"\nQuery: {query_ep_id}  "
+        f"({len(_within) - 1} hits within threshold)"
     )
+    print(hits_table.to_string(index=False))
+
+    # One colour per *trip* (not per segment), so neighbouring hits
+    # read as distinct polylines rather than a stack of MOVE/STOP_BRIEF
+    # blobs. Query is black; hits sample the viridis colormap by rank.
+    import matplotlib.cm as _cm  # noqa: E402, PLC0415
+    _n_hits = max(len(hits_table) - 1, 1)
+    _hit_palette = [
+        "#{:02x}{:02x}{:02x}".format(*(int(255 * c) for c in _cm.viridis(i / _n_hits)[:3]))
+        for i in range(_n_hits)
+    ]
 
     m_ep_sim = folium.Map(
-        location=[center_lat, center_lon], zoom_start=11, tiles="cartodbpositron"
+        location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
     )
-    for _, row in hits_table.iterrows():
-        ep_row = episodes.loc[episodes["episode_id"] == row["episode_id"]].iloc[0]
-        is_query = row["rank"] == 0
-        if ep_row["episode_type"] == "STAY":
-            folium.CircleMarker(
-                location=[float(ep_row["anchor_lat"]), float(ep_row["anchor_lon"])],
-                radius=10 if is_query else 6,
-                color="#000000" if is_query else "#1f77b4",
-                fill=True,
-                fill_opacity=0.7 if is_query else 0.5,
-                tooltip=(
-                    f"rank={row['rank']} score={row['score']:.4f} STAY "
-                    f"({float(ep_row['duration_s']) / 60:.0f} min)"
-                ),
-            ).add_to(m_ep_sim)
-        else:
-            _episode_path_polyline(
-                m_ep_sim, ep_row, rank=int(row["rank"]), is_query=is_query
-            )
+    for _, _row in hits_table.iterrows():
+        _ep_row = transits.loc[transits["episode_id"] == _row["episode_id"]].iloc[0]
+        _is_query = _row["rank"] == 0
+        _trip_pings = per_ping_segmented[
+            per_ping_segmented["segment_id"].isin(_ep_row["segment_ids"])
+        ]
+        if len(_trip_pings) < 2:
+            continue
+        _colour = "#000000" if _is_query else _hit_palette[int(_row["rank"]) - 1]
+        folium.PolyLine(
+            locations=list(zip(
+                _trip_pings["lat"].astype(float),
+                _trip_pings["lon"].astype(float),
+                strict=True,
+            )),
+            color=_colour,
+            weight=6 if _is_query else 3,
+            opacity=0.95 if _is_query else 0.75,
+            tooltip=(
+                f"rank={int(_row['rank'])} dist={_row['dist']:.2f} "
+                f"{_row['episode_id']} • {_row['dur_min']} min • "
+                f"{_row['path_km']} km • v={_row['v_ms']} m/s"
+            ),
+        ).add_to(m_ep_sim)
     m_ep_sim.save("episode_similarity_map.html")
 else:
-    print("No multi-segment TRANSIT episodes in this slice — similarity demo skipped.")
+    print("Need at least 2 TRANSITs for a similarity demo.")
 
 m_ep_sim
 
 # %% [markdown]
-# Hits match the query on segment-mix and behavioural shape and land
-# geographically scattered — that's the signature an L2-normalised
-# cosine over per-segment vectors emphasises. Absolute size (total
-# path length, total duration) is included as scalar features but only
-# weakly tracked, since three episode-level scalars contribute ~3% of
-# a ~100-d vector under cosine. If you need length-prioritised
-# similarity, weight the scalars higher in your own pool or switch the
-# index to L2 — episode-level pooling is intentionally a user-side
-# decision.
+# Hits should share the query's scale, motion-state mix, speed band,
+# and shape — and land geographically scattered, since neither spatial
+# coordinates nor anchor location enter the trip vector. Compare
+# against the segment-similarity map (§10): segments match on shape
+# because their vector encodes shape directly; trips now match on
+# trip-shaped features for the same reason.
+#
+# If a query returns no hits within threshold, the embedding is being
+# honest — the trip is genuinely isolated in feature space and no
+# nearest-neighbour is meaningfully *similar*. Tighten the threshold
+# (smaller percentile) for stricter matches, or relax it to surface
+# weak analogies; either is a user-side decision over the same
+# feature frame.
+
+# %% [markdown]
+# ## 17b. STAY similarity — *"find me dwells like this dwell"*
+#
+# STAYs are points in space-time, not paths. Their internal segments
+# are jitter around an anchor, not structure to compare. The honest
+# STAY vector is small: duration class plus when it happened.
+#
+# * **Scale** (1 dim) — log duration.
+# * **Time context** (4 dims) — cyclic hour-of-day and day-of-week.
+#
+# Same data-driven recipe as §17: standardise, Euclidean distance,
+# threshold at the 5th percentile of pairwise distances, query =
+# best-supported STAY, return all hits within threshold. 5 dims is
+# enough because the question itself is simple — adding mode-mix or
+# shape here would just inject noise that doesn't correspond to
+# anything a user means by "similar dwell."
+
+# %%
+def _stay_features(ep_row: pd.Series) -> dict[str, float]:
+    """Trip-free STAY features: duration + cyclic time-of-day/week."""
+    dur = float(ep_row["duration_s"])
+    start_ts = pd.Timestamp(ep_row["start_ts"])
+    hod = (start_ts.hour + start_ts.minute / 60.0) / 24.0
+    dow = start_ts.dayofweek / 7.0
+    return {
+        "log_duration_s": float(np.log1p(max(dur, 0.0))),
+        "hod_sin": float(np.sin(2 * np.pi * hod)),
+        "hod_cos": float(np.cos(2 * np.pi * hod)),
+        "dow_sin": float(np.sin(2 * np.pi * dow)),
+        "dow_cos": float(np.cos(2 * np.pi * dow)),
+    }
+
+
+_stays_df = episodes[episodes["episode_type"] == "STAY"].reset_index(drop=True)
+stay_features = pd.DataFrame(
+    [_stay_features(_r) for _, _r in _stays_df.iterrows()],
+    index=_stays_df["episode_id"].astype(str).tolist(),
+)
+print(f"STAY episodes: {len(stay_features)}, features: {stay_features.shape[1]}")
+
+_s_mu = stay_features.mean()
+_s_sd = stay_features.std().replace(0.0, 1.0)
+_S = ((stay_features - _s_mu) / _s_sd).to_numpy(dtype=np.float32)
+
+m_stay_sim = None
+if len(_S) > 1:
+    _DS = np.sqrt(((_S[:, None, :] - _S[None, :, :]) ** 2).sum(axis=2))
+    _su = _DS[np.triu_indices(len(_S), k=1)]
+    STAY_THRESH = float(np.percentile(_su, 5))
+    print(
+        f"Distance threshold (5th percentile of pairwise dists): {STAY_THRESH:.2f}"
+    )
+
+    _nc = (_DS <= STAY_THRESH).sum(axis=1) - 1
+    _q_idx = int(np.argmax(_nc))
+    _q_id = list(stay_features.index)[_q_idx]
+
+    _within = np.where(_DS[_q_idx] <= STAY_THRESH)[0]
+    _within = _within[np.argsort(_DS[_q_idx, _within])]
+
+    _hit_rows = []
+    for _rank, _j in enumerate(_within):
+        _ep = _stays_df.iloc[_j]
+        _hit_rows.append({
+            "rank": _rank,
+            "episode_id": str(_ep["episode_id"]),
+            "dist": round(float(_DS[_q_idx, _j]), 2),
+            "dur_min": int(round(float(_ep["duration_s"]) / 60)),
+            "start": pd.Timestamp(_ep["start_ts"]).strftime("%a %H:%M"),
+        })
+    hits_table_stay = pd.DataFrame(_hit_rows)
+
+    print(
+        f"\nQuery: {_q_id}  "
+        f"({len(_within) - 1} hits within threshold)"
+    )
+    print(hits_table_stay.to_string(index=False))
+
+    # Map: query in black, hits each get a distinct colour sampled from
+    # the viridis colormap by rank — so even with many hits, every
+    # anchor is visually separable.
+    import matplotlib.cm as _cm  # noqa: E402, PLC0415
+    _n_stay_hits = max(len(hits_table_stay) - 1, 1)
+    _stay_palette = [
+        "#{:02x}{:02x}{:02x}".format(*(int(255 * c) for c in _cm.viridis(i / _n_stay_hits)[:3]))
+        for i in range(_n_stay_hits)
+    ]
+    m_stay_sim = folium.Map(
+        location=[center_lat, center_lon], zoom_start=12, tiles="cartodbpositron"
+    )
+    for _, _row in hits_table_stay.iterrows():
+        _ep = _stays_df.loc[_stays_df["episode_id"] == _row["episode_id"]].iloc[0]
+        _is_query = _row["rank"] == 0
+        _col = "#000000" if _is_query else _stay_palette[int(_row["rank"]) - 1]
+        folium.CircleMarker(
+            location=[float(_ep["anchor_lat"]), float(_ep["anchor_lon"])],
+            radius=12 if _is_query else 8,
+            color=_col,
+            weight=3 if _is_query else 2,
+            fill=True,
+            fill_opacity=0.9 if _is_query else 0.6,
+            tooltip=(
+                f"rank={int(_row['rank'])} dist={_row['dist']:.2f} "
+                f"{_row['episode_id']} • {_row['dur_min']} min • {_row['start']}"
+            ),
+        ).add_to(m_stay_sim)
+    m_stay_sim.save("stay_similarity_map.html")
+else:
+    print("Need at least 2 STAYs for a similarity demo.")
+
+m_stay_sim
 
 # %% [markdown]
 # ## 18. Does similarity actually retrieve same-kind segments?
@@ -1285,14 +1512,12 @@ m_ep_sim
 # `k` nearest neighbours (excluding the query itself). Count how many
 # share the query's `segment_type`. Average across all segments.
 #
-# Two baselines to compare against:
-#
-# * **Uniform random** — 25%, the rate you'd see if there were four
-#   equally common types and neighbours were drawn at random.
-# * **Proportional random** — `Σ p_i²` over the corpus's actual type
-#   shares. This is the right baseline for an unbalanced corpus: even
-#   random neighbours hit the same type more than 25% of the time when
-#   the corpus is skewed.
+# The right random baseline is type-specific. For a query of type T,
+# random neighbours drawn from the corpus would match T at the rate of
+# T's corpus share. So the per-type baseline is just that share —
+# 45% for MOVE, 1% for STOP_DWELL. The aggregate baseline (`Σ p_i²`)
+# is what a random embedding would produce averaged across all
+# segments.
 
 # %%
 _K = 10
@@ -1303,7 +1528,6 @@ _types_arr = (
 )
 _type_counts = pd.Series(_types_arr).value_counts()
 _type_props = _type_counts / len(_types_arr)
-_uniform = 1.0 / len(_type_counts)
 _proportional = float((_type_props ** 2).sum())
 
 # Reuse the segment index built in section 10.
@@ -1330,58 +1554,72 @@ _per_type_purity = {
     for t, v in _per_type_hits.items()
 }
 
-print(f"Neighbour purity at k={_K}: {100*_overall_purity:.1f}%")
-print(f"  uniform random baseline:      {100*_uniform:.1f}%")
-print(f"  proportional random baseline: {100*_proportional:.1f}% "
-      f"(matches actual type distribution)")
-print(f"\nPer-type purity (n = segments of that type):")
+print(f"Neighbour purity at k={_K}: {100*_overall_purity:.1f}%  "
+      f"(aggregate random baseline: {100*_proportional:.1f}%)")
+print(f"\nPer-type purity (lift = observed / type's own random baseline):")
+print(f"  {'type':<12s}  {'n':>4s}  {'share':>6s}  {'purity':>7s}  {'baseline':>9s}  {'lift':>5s}")
 for _t in _type_counts.index:
-    print(
-        f"  {_t:<12s}  n={int(_type_counts[_t]):>3d}  "
-        f"share={_type_props[_t]*100:>5.1f}%  "
-        f"purity@{_K}={_per_type_purity[_t]*100:>5.1f}%"
-    )
+    _share = float(_type_props[_t])
+    _obs = _per_type_purity[_t]
+    _lift = _obs / _share if _share > 0 else float("inf")
+    print(f"  {_t:<12s}  {int(_type_counts[_t]):>4d}  "
+          f"{_share*100:>5.1f}%  "
+          f"{_obs*100:>6.1f}%  "
+          f"{_share*100:>8.1f}%  "
+          f"{_lift:>4.1f}×")
 
-# Bar chart: overall + per-type purity vs the proportional baseline
+# Bar chart: per-bar baseline marker for fair per-type comparison.
 fig, ax = plt.subplots(figsize=(9, 4.5))
 _labels = ["overall"] + list(_type_counts.index)
 _vals = [_overall_purity] + [_per_type_purity[t] for t in _type_counts.index]
+_baselines = [_proportional] + [float(_type_props[t]) for t in _type_counts.index]
 _colours = ["#444444"] + [COLOUR[t] for t in _type_counts.index]
-_bars = ax.barh(_labels, [100 * v for v in _vals], color=_colours)
-ax.axvline(100 * _proportional, color="#888", ls="--", lw=1,
-           label=f"proportional random ({100*_proportional:.1f}%)")
-ax.axvline(100 * _uniform, color="#bbb", ls=":", lw=1,
-           label=f"uniform random ({100*_uniform:.1f}%)")
+_y_positions = np.arange(len(_labels))
+_bars = ax.barh(_y_positions, [100 * v for v in _vals],
+                color=_colours, height=0.7)
+ax.set_yticks(_y_positions)
+ax.set_yticklabels(_labels)
+
+# Per-bar baseline as a vertical tick spanning the bar's height.
+for _y, _base in zip(_y_positions, _baselines, strict=True):
+    ax.plot(
+        [100 * _base, 100 * _base],
+        [_y - 0.35, _y + 0.35],
+        color="#444", lw=2, solid_capstyle="butt",
+    )
+    ax.text(100 * _base + 0.5, _y - 0.40, f"baseline {100*_base:.1f}%",
+            fontsize=8, color="#555", va="top")
+
 ax.set_xlim(0, 100)
 ax.set_xlabel(f"share of top-{_K} neighbours matching query's segment_type (%)")
-ax.set_title("Neighbour purity: how often does similarity retrieve same-kind segments?")
+ax.set_title("Neighbour purity vs each row's own random baseline")
 ax.invert_yaxis()
-ax.legend(loc="lower right", fontsize=9)
 ax.grid(True, alpha=0.2, axis="x")
 for bar, val in zip(_bars, _vals, strict=True):
     ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
-            f"{100*val:.1f}%", va="center", fontsize=9)
+            f"{100*val:.1f}%", va="center", fontsize=9, fontweight="bold")
 plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # Reading the result:
 #
-# * Overall purity well above the proportional baseline means
-#   similarity is retrieving same-kind segments rather than reaching
-#   for whatever happens to be common in the corpus.
-# * Per-type purity reveals where the embedding works easily and
-#   where it doesn't. `MOVE` and `STOP_BRIEF` are the two big,
-#   internally consistent classes — neighbours stay within type
-#   almost always. `MOVE_BRIEF` is geometrically ambiguous: a brief
-#   move sits between a stop and a sustained move in feature space,
-#   so its top-`k` mixes both. `STOP_DWELL` has too few examples in
-#   this slice (~1% of the corpus) for k=10 same-type neighbours to
-#   exist at all — the metric isn't broken, the data is just thin.
+# * **MOVE** and **STOP_BRIEF** are the two large, internally
+#   consistent classes — purity hovers around 93% against a 45%/39%
+#   baseline. Roughly 2× lift, near the ceiling for retrieval on these
+#   classes.
+# * **MOVE_BRIEF** sits geometrically between MOVE and STOP_BRIEF in
+#   feature space (brief move = "kind of stop, kind of move"), so its
+#   top-`k` mixes both. Still 4.6× above its baseline.
+# * **STOP_DWELL** has only 9 examples in this slice. Asking for
+#   k=10 same-type neighbours is asking for more than exists, so
+#   absolute purity is bounded at ~(9−1)/10 = 80%. The 11.1% reading
+#   is **11× its own baseline** — actually the strongest per-class
+#   lift in the corpus, just constrained by data thinness.
 #
-# These limits are properties of the recipe and the corpus, not
-# something to defend against. The recipe is good at the classes
-# that have distinctive kinematic + shape fingerprints and weakest
-# at the classes that sit between them.
+# Every class is well above its own random baseline. The recipe is
+# doing real retrieval; the visible variation in absolute purity
+# tracks corpus composition and class-overlap geometry, not embedding
+# quality.
 
 # %% [markdown]
 # ## Closing

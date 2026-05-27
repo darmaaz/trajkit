@@ -66,4 +66,8 @@ uv.lock
 examples/geolife/*.html
 examples/geolife/_explore_source.ipynb
 examples/geolife/explore.py
+# Folium maps `m.save("foo.html")` writes to CWD, which can be the repo
+# root when the notebook is executed via nbconvert from there.
+*_anatomy.html
+*_map.html
 **/.ipynb_checkpoints/
