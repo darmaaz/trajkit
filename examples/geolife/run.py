@@ -62,7 +62,19 @@ def _step(n: int, total: int, label: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="End-to-end trajkit pipeline run on Microsoft Geolife "
+        "trajectories with pedestrian-tuned parameters.",
+        epilog=(
+            "Expected data layout (from Microsoft's distribution):\n"
+            "  data_dir/\n"
+            "  ├── 000/Trajectory/*.plt\n"
+            "  ├── 001/Trajectory/*.plt\n"
+            "  └── ...\n\n"
+            "See examples/geolife/README.md for the download URL."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "data_dir",
         type=Path,

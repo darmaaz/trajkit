@@ -63,7 +63,13 @@ from trajkit.episode import EpisodeParams, detect_episodes  # noqa: E402
 from trajkit.segment import SegmentParams, aggregate_segments  # noqa: E402
 from trajkit.segment import segment as run_segment  # noqa: E402
 
-GEOLIFE_DATA = Path(os.path.expanduser("~/.cache/trajkit/Geolife Trajectories 1.3/Data"))
+# Override with the GEOLIFE_DATA env var to point at your own copy without
+# editing this file.
+GEOLIFE_DATA = Path(
+    os.path.expanduser(
+        os.getenv("GEOLIFE_DATA", "~/.cache/trajkit/Geolife Trajectories 1.3/Data")
+    )
+)
 USER_ID = "000"
 TIME_WINDOW_DAYS = 7
 
@@ -118,8 +124,9 @@ print(f"Window: {window_start.date()} → {window_end.date()}  "
 # %% [markdown]
 # ## 2. Run the pipeline
 #
-# The L1 functions compose explicitly — no orchestrator, no on-disk
-# persistence. Everything stays in memory for the rest of the notebook.
+# The pipeline functions compose explicitly — no orchestrator, no
+# on-disk persistence. Everything stays in memory for the rest of the
+# notebook.
 
 # %%
 cleaned_per_ping = clean(pings, CLEAN_PARAMS)

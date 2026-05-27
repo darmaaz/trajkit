@@ -16,3 +16,25 @@ jobs:
           enable-cache: true
       - run: uv sync --extra dev
       - run: uv run mkdocs build --strict
+
+  deploy:
+    # Only publish from main, not from PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required for `mkdocs gh-deploy` to push to gh-pages.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - name: Configure git identity for gh-deploy
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - run: uv run mkdocs gh-deploy --force

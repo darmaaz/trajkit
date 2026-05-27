@@ -81,7 +81,7 @@ episodes = detect_episodes(segments)
 vectors, ids = embed_segments(segments)
 
 index = build_index(vectors, ids, metric="cosine")
-hits  = search(index, vectors[0], k=5)
+hits  = search(index, vectors[0], k=2)  # k matched to corpus size
 ```
 
 Real-data example (pedestrian, Microsoft Geolife):

@@ -1,5 +1,6 @@
 site_name: trajkit
 site_description: End-to-end pipeline for trajectory analysis — reference design.
+site_url: https://darmaaz.github.io/trajkit/
 repo_url: https://github.com/darmaaz/trajkit
 repo_name: darmaaz/trajkit
 

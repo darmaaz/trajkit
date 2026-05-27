@@ -39,15 +39,24 @@ and you get:
 ## Re-executing the notebook
 
 ```bash
-uv pip install jupyter jupytext matplotlib folium
-uv run jupytext --to ipynb examples/geolife/_explore_source.py \
+uv run jupytext --update --to ipynb examples/geolife/_explore_source.py \
     -o examples/geolife/explore.ipynb
 uv run jupyter nbconvert --to notebook --execute --inplace \
     examples/geolife/explore.ipynb
 ```
 
 `_explore_source.py` is the canonical edit surface — re-run the two
-commands above to refresh the `.ipynb` after edits.
+commands above to refresh the `.ipynb` after edits. The `--update`
+flag preserves existing cell IDs so successive regenerations don't
+churn cell metadata, which keeps the `.ipynb` diff small and readable
+in git.
+
+To point the notebook at a Geolife copy outside the default cache
+path, export `GEOLIFE_DATA` before running:
+
+```bash
+export GEOLIFE_DATA="/path/to/Geolife Trajectories 1.3/Data"
+```
 
 ## Download
 
