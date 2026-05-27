@@ -3,6 +3,13 @@
 End-to-end run of the trajkit pipeline on the Microsoft Geolife dataset
 (pedestrian / multi-modal GPS, non-fleet).
 
+> **Viewing the notebook with maps:** GitHub's static notebook renderer
+> doesn't execute the JavaScript folium maps depend on, so map cells
+> show a "trust" placeholder. For the full interactive view, open the
+> notebook on
+> [**nbviewer**](https://nbviewer.org/github/darmaaz/trajkit/blob/main/examples/geolife/explore.ipynb)
+> or in a local Jupyter / VS Code session.
+
 ## What's here
 
 | File | Purpose |
@@ -43,13 +50,17 @@ uv run jupytext --update --to ipynb examples/geolife/_explore_source.py \
     -o examples/geolife/explore.ipynb
 uv run jupyter nbconvert --to notebook --execute --inplace \
     examples/geolife/explore.ipynb
+uv run jupyter trust examples/geolife/explore.ipynb
 ```
 
-`_explore_source.py` is the canonical edit surface — re-run the two
+`_explore_source.py` is the canonical edit surface — re-run the three
 commands above to refresh the `.ipynb` after edits. The `--update`
 flag preserves existing cell IDs so successive regenerations don't
 churn cell metadata, which keeps the `.ipynb` diff small and readable
-in git.
+in git. `jupyter trust` signs the freshly-executed notebook so folium
+maps render inline in local Jupyter / VS Code sessions (GitHub's
+static renderer doesn't honor trust signatures — use nbviewer for
+that, see the link at the top of this README).
 
 To point the notebook at a Geolife copy outside the default cache
 path, export `GEOLIFE_DATA` before running:
