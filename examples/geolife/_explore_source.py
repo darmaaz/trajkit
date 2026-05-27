@@ -26,10 +26,12 @@
 #    direction change.** Hysteresis avoids flicker; the multi-scale
 #    circular-R bearing detector splits long `MOVE` segments where the
 #    trajectory actually turns.
-# 2. **Similarity search over per-segment vectors.** With trips pooled
-#    from their constituent segments, "find me trips like this one"
-#    becomes a cosine query against a FAISS index — returning hits that
-#    match on behaviour shape, not geography.
+# 2. **Two complementary similarity flows.** For *segments*, a direct
+#    cosine query over the per-segment vectors `embed_segments`
+#    produces — that's the library's primitive. For *episodes*,
+#    trip-native features (motion-state mix, scale, shape, speed
+#    band, time context) compared by Euclidean distance in z-space,
+#    with the threshold and query both data-driven.
 #
 # The flow is **pings → segments → episodes → similarity**.
 
@@ -228,7 +230,6 @@ ds = _per_ping["speed_ms"].fillna(0.0).to_numpy()
 in_dead = (ds > stop_ms_) & (ds < resume_ms_)
 
 _WIN = 120
-_csum = np.concatenate([[0], np.cumsum(in_dead.astype(int))])
 _best_idx, _best_score = None, -1
 for b in _per_ping.index[_per_ping["_state_change"]]:
     lo = max(0, int(b) - _WIN // 2)

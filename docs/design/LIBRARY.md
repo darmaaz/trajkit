@@ -146,7 +146,6 @@ Lean by default.
 | `pyarrow` | required | parquet round-trip |
 | `h3>=4` | required | spatial indexing; pinned major to avoid the v3 → v4 API break |
 | `pyproj` | required | great-circle / projection helpers |
-| `scikit-learn` | required | (currently a thin dep; could be removed if no consumer remains) |
 | `faiss-cpu` | required | similarity search; fragile pip install on Apple Silicon — conda-forge is the reliable path |
 | `geopandas` | **forbidden** | pulls GDAL; install hell on Windows and Apple Silicon |
 

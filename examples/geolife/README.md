@@ -9,36 +9,40 @@ End-to-end run of the trajkit pipeline on the Microsoft Geolife dataset
 |---|---|
 | `reader.py` | `.plt` parser + per-user trajectory loader |
 | `run.py` | end-to-end pipeline runner with summary printouts (CLI) |
-| `explore.ipynb` | **Visual validation notebook** — segment maps, STAY anchors, similarity demo |
+| `explore.ipynb` | **Visual validation notebook** — every design decision tied to something visible on a real trace |
 | `_explore_source.py` | jupytext source for `explore.ipynb` (edit here, regenerate notebook) |
-| `segments_map.html` | standalone trajectory map (color-coded by segment_type) |
-| `stays_map.html` | standalone STAY anchors map |
-| `similarity_map.html` | standalone similarity-search visualisation |
-| `README.md` | this file — download + run instructions |
+
+The notebook also writes standalone interactive maps (`*_map.html`,
+`*_anatomy.html`) next to it when executed, but they're regenerated
+on every run and not committed.
 
 ## Visual validation
 
 `explore.ipynb` is the recommended starting point for evaluating
-trajkit on Geolife. Open it in JupyterLab / VS Code / on GitHub and you
-get:
+trajkit on Geolife. Open it in JupyterLab / VS Code / on GitHub
+and you get:
 
-* histograms of segment-type breakdown and STAY duration
-* an interactive Folium map of the trajectory color-coded by
-  `segment_type`
-* an interactive map of STAY anchors sized by duration
-* a similarity-search demo (query segment + top-5 nearest neighbours
-  on a map)
-
-The standalone `*.html` files contain the same maps for direct browser
-viewing without Jupyter.
+* histograms of segment-type and episode-type breakdowns
+* interactive Folium maps of the trajectory coloured by `segment_type`
+* a bearing-driven boundary anatomy with the multi-scale circular-R
+  detector visualised alongside the raw bearings
+* anatomy maps for one TRANSIT and one STAY episode (the running
+  anchor rule in action)
+* a segment-similarity demo (cosine over per-segment vectors)
+* a TRANSIT-similarity demo (Euclidean over trip-native features,
+  data-driven threshold, query auto-picked from the densest part
+  of the corpus)
+* a STAY-similarity demo (duration + cyclic time context)
+* a neighbour-purity benchmark that quantifies whether the segment
+  embedding does the job `compare` advertises
 
 ## Re-executing the notebook
 
 ```bash
-pip install jupyter jupytext matplotlib folium
-jupytext --to ipynb examples/geolife/_explore_source.py \
+uv pip install jupyter jupytext matplotlib folium
+uv run jupytext --to ipynb examples/geolife/_explore_source.py \
     -o examples/geolife/explore.ipynb
-jupyter nbconvert --to notebook --execute --inplace \
+uv run jupyter nbconvert --to notebook --execute --inplace \
     examples/geolife/explore.ipynb
 ```
 
@@ -75,20 +79,16 @@ The download is ~1.6 GB.
 
 ```bash
 # 5 users by default
-python examples/geolife/run.py "/path/to/Geolife Trajectories 1.3/Data"
+uv run python examples/geolife/run.py "/path/to/Geolife Trajectories 1.3/Data"
 
 # specific users
-python examples/geolife/run.py "/path/to/Geolife Trajectories 1.3/Data" \
+uv run python examples/geolife/run.py "/path/to/Geolife Trajectories 1.3/Data" \
     --user-list 000,001,002
-
-# persist outputs to a chosen directory
-python examples/geolife/run.py "/path/to/Geolife Trajectories 1.3/Data" \
-    --users 3 --sink ./geolife_out
 ```
 
 Expected runtime: 30 seconds to a few minutes per user, depending on the
 number of `.plt` files (some users have hundreds of trajectories
-spanning years).
+spanning years). Everything runs in memory; nothing is persisted.
 
 ## What the script does
 
@@ -106,8 +106,7 @@ spanning years).
 Geolife is multi-modal (Beijing residents walking, biking, driving,
 taking taxis and trains), which exercises the pipeline well outside the
 vehicle-cadence defaults. The pedestrian thresholds used here are
-documented in `tests/integration/test_pedestrian_pipeline.py`.
-
-Either outcome is informative. Synthetic pedestrian fixtures (in the
-`tests/integration/` suite) prove the pipeline doesn't crash; this
-script proves it produces sensible output on real-world noisy GPS.
+documented in `tests/integration/test_pedestrian_pipeline.py`. The
+synthetic fixtures in `tests/integration/` prove the pipeline doesn't
+crash; this script proves it produces sensible output on real-world
+noisy GPS.

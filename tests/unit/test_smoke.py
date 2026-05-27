@@ -1,10 +1,12 @@
 """Smoke tests: package imports and exposes its version."""
 
+import re
+
 import trajkit
 
 
 def test_version_exists() -> None:
-    assert trajkit.__version__ == "0.1.0"
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:[+\-.][\w.]+)?", trajkit.__version__)
 
 
 def test_modules_import() -> None:

@@ -60,10 +60,8 @@ it; that's what the code is for.
 ```bash
 git clone https://github.com/darmaaz/trajkit.git
 cd trajkit
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
+uv sync --extra dev
+uv run pytest
 ```
 
 Synthetic quickstart:
@@ -89,7 +87,7 @@ hits  = search(index, vectors[0], k=5)
 Real-data example (pedestrian, Microsoft Geolife):
 
 ```bash
-python examples/geolife/run.py /path/to/Geolife/Data --users 5
+uv run python examples/geolife/run.py /path/to/Geolife/Data --users 5
 ```
 
 See [`examples/geolife/README.md`](examples/geolife/README.md) for download
