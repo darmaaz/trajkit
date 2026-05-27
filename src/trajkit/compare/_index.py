@@ -95,6 +95,10 @@ def build_index(
     ):
         arr = _normalize_rows(arr)
 
+    # Annotate to the base class — `IndexFlatIP` and `IndexFlatL2` are
+    # distinct types in stricter faiss stubs (e.g. the Linux wheel), so
+    # an inferred type from the first branch would reject the second.
+    faiss_index: faiss.Index
     if metric == "cosine":
         faiss_index = faiss.IndexFlatIP(arr.shape[1])
     else:
