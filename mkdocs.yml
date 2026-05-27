@@ -25,12 +25,6 @@ theme:
 
 plugins:
   - search
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            show_source: false
-            show_root_heading: true
 
 markdown_extensions:
   - admonition
@@ -42,10 +36,6 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Concepts:
-      - concepts/index.md
-      - Pipeline: concepts/pipeline.md
-      - Parameters: concepts/parameters.md
   - Design:
       - design/schemas.md
       - Modules:
@@ -55,12 +45,3 @@ nav:
           - design/embed.md
           - design/compare.md
       - Architecture notes: design/LIBRARY.md
-  - Reference:
-      - reference/index.md
-      - clean: reference/clean.md
-      - segment: reference/segment.md
-      - episode: reference/episode.md
-      - embed: reference/embed.md
-      - compare: reference/compare.md
-      - testing: reference/testing.md
-      - types: reference/types.md

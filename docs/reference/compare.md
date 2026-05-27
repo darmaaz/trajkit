@@ -1,3 +1,0 @@
-# `trajkit.compare`
-
-::: trajkit.compare

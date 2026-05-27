@@ -1,3 +1,0 @@
-# `trajkit.episode`
-
-::: trajkit.episode

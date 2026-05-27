@@ -1,3 +1,0 @@
-# `trajkit.segment`
-
-::: trajkit.segment

@@ -1,3 +1,0 @@
-# `trajkit.clean`
-
-::: trajkit.clean

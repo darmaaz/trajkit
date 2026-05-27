@@ -1,3 +1,0 @@
-# `trajkit.embed`
-
-::: trajkit.embed
